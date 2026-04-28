@@ -37,9 +37,9 @@ export default function Sidebar({ view, setView, agentStates, user, onLogout }: 
             <div key={item.id} className={`sidebar-nav-item ${view === item.id ? 'active' : ''}`} onClick={() => setView(item.id)}>
               <span className="nav-icon">{item.icon}</span>
               {item.label}
-              {item.agent && (
+              {'agent' in item && item.agent && (
                 <div className="sidebar-agent-dot" style={{
-                  background: agentStates[item.id as AgentId] === 'running' ? (item as { color: string }).color : 'var(--ink-l)',
+                  background: agentStates[item.id as AgentId] === 'running' ? item.color : 'var(--ink-l)',
                   animation: agentStates[item.id as AgentId] === 'running' ? 'agentPulse 2.4s ease-in-out infinite' : 'none',
                 }} />
               )}
