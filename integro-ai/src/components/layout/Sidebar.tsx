@@ -9,7 +9,9 @@ interface Props {
   onLogout: () => void
 }
 
-const NAV_GROUPS = [
+type NavItem = { id: string; icon: string; label: string; agent?: boolean; color?: string }
+
+const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
   { label: 'Overview', items: [
     { id: 'dashboard',      icon: '⊞', label: 'Dashboard' },
     { id: 'playbooks',      icon: '📋', label: 'Playbooks' },
@@ -39,7 +41,7 @@ export default function Sidebar({ view, setView, agentStates, user, onLogout }: 
               {item.label}
               {item.agent && (
                 <div className="sidebar-agent-dot" style={{
-                  background: agentStates[item.id as AgentId] === 'running' ? (item as { color: string }).color : 'var(--ink-l)',
+                  background: agentStates[item.id as AgentId] === 'running' ? item.color : 'var(--ink-l)',
                   animation: agentStates[item.id as AgentId] === 'running' ? 'agentPulse 2.4s ease-in-out infinite' : 'none',
                 }} />
               )}
