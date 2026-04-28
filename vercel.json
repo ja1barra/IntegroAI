@@ -1,0 +1,7 @@
+{
+  "buildCommand": "cd integro-ai && npm install && npm run build",
+  "outputDirectory": "integro-ai/dist",
+  "rewrites": [
+    { "source": "/(.*)", "destination": "/index.html" }
+  ]
+}
