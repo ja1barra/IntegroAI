@@ -14,6 +14,8 @@ import PlaybooksView from './views/PlaybooksView'
 import ReportsView from './views/ReportsView'
 import IntegrationsView from './views/IntegrationsView'
 import TeamView from './views/TeamView'
+import ProfileView from './views/ProfileView'
+import AcademyView from './views/AcademyView'
 import type { User, AgentStates, AgentId, Toast, Tweaks } from './types'
 
 const DEFAULT_AGENT_STATES: AgentStates = { outbound: 'running', demand: 'running', success: 'running', 'playbook-agent': 'running' }
@@ -141,6 +143,8 @@ export default function AppShell({ user, userId, onLogout }: { user: User; userI
           <ReportsView       active={view === 'reports'}          addToast={addToast} />
           <IntegrationsView  active={view === 'integrations'}     addToast={addToast} />
           <TeamView          active={view === 'team'}             addToast={addToast} />
+          <ProfileView       active={view === 'profile'}          user={user} />
+          <AcademyView       active={view === 'academy'} />
         </main>
       </div>
 

@@ -1,5 +1,6 @@
-import type { AgentId, AgentStates } from '../../types'
-import type { User } from '../../types'
+import { useState } from 'react'
+import type { AgentId, AgentStates, User } from '../../types'
+import UserMenu from './UserMenu'
 
 interface Props {
   view: string
@@ -30,13 +31,19 @@ const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
 ]
 
 export default function Sidebar({ view, setView, agentStates, user, onLogout }: Props) {
+  const [menuOpen, setMenuOpen] = useState(false)
+
   return (
     <aside className="sidebar">
       {NAV_GROUPS.map(g => (
         <div key={g.label} className="sidebar-section">
           <div className="sidebar-label">{g.label}</div>
           {g.items.map(item => (
-            <div key={item.id} className={`sidebar-nav-item ${view === item.id ? 'active' : ''}`} onClick={() => setView(item.id)}>
+            <div
+              key={item.id}
+              className={`sidebar-nav-item ${view === item.id ? 'active' : ''}`}
+              onClick={() => setView(item.id)}
+            >
               <span className="nav-icon">{item.icon}</span>
               {item.label}
               {item.agent && (
@@ -49,13 +56,28 @@ export default function Sidebar({ view, setView, agentStates, user, onLogout }: 
           ))}
         </div>
       ))}
-      <div className="sidebar-footer">
-        <div className="sidebar-user" onClick={onLogout}>
+
+      <div className="sidebar-footer" style={{ position: 'relative' }}>
+        {menuOpen && (
+          <UserMenu
+            user={user}
+            onNavigate={setView}
+            onLogout={onLogout}
+            onClose={() => setMenuOpen(false)}
+          />
+        )}
+        <div
+          className={`sidebar-user ${menuOpen ? 'active' : ''}`}
+          onClick={e => { e.stopPropagation(); setMenuOpen(p => !p) }}
+        >
           <div className="sidebar-avatar">{user.initials}</div>
           <div className="sidebar-user-info">
             <div className="sidebar-user-name">{user.name}</div>
             <div className="sidebar-user-role">{user.role}</div>
           </div>
+          <span className="sidebar-user-chevron" style={{
+            transform: menuOpen ? 'rotate(180deg)' : 'rotate(0deg)',
+          }}>‹</span>
         </div>
       </div>
     </aside>
