@@ -10,7 +10,7 @@ const INTEGRATIONS = [
 ]
 
 export default function IntegrationsView({ active, addToast }: { active: boolean; addToast: (m: string) => void }) {
-  const [conn, setConn] = useState<Record<string,boolean>>({ salesforce:true, hubspot:false, linkedin:true, apollo:true, slack:true, gong:false })
+  const [conn, setConn] = useState<Record<string,boolean>>({ salesforce:false, hubspot:false, linkedin:false, apollo:false, slack:false, gong:false })
   const toggle = (id: string, name: string) => {
     setConn(p => { const next = !p[id]; addToast(`${name} ${next ? 'connected ✓' : 'disconnected'}`); return { ...p, [id]: next } })
   }
