@@ -47,10 +47,17 @@ export default function SignIn() {
   }
 
   const doDemo = async () => {
+    const demoEmail = import.meta.env.VITE_DEMO_EMAIL as string | undefined
+    const demoPw    = import.meta.env.VITE_DEMO_PASSWORD as string | undefined
+    if (!demoEmail || !demoPw) {
+      setError('Demo account is not configured.')
+      triggerShake()
+      return
+    }
     setLoading(true); setError('')
     const { error: authError } = await supabase.auth.signInWithPassword({
-      email: 'demo@integroai.com',
-      password: 'demo-integro-2026',
+      email: demoEmail,
+      password: demoPw,
     })
     if (authError) {
       setError('Demo account unavailable — please sign up for free.')

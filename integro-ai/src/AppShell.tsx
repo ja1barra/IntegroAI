@@ -19,23 +19,16 @@ import type { User, AgentStates, AgentId, Toast, Tweaks } from './types'
 const DEFAULT_AGENT_STATES: AgentStates = { outbound: 'running', demand: 'running', success: 'running', 'playbook-agent': 'running' }
 const DEFAULT_TWEAKS: Tweaks = { darkMode: false, accentColor: 'orange', density: 'default' }
 
-// Debounce helper — persist settings at most once per second
-function useDebouncedPersist(userId: string, agentStates: AgentStates, tweaks: Tweaks, ready: boolean) {
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  useEffect(() => {
-    if (!ready) return
-    if (timer.current) clearTimeout(timer.current)
-    timer.current = setTimeout(async () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await supabase.from('user_settings').upsert({
-        user_id: userId,
-        agent_states: agentStates as any,
-        tweaks: tweaks as any,
-        updated_at: new Date().toISOString(),
-      })
-    }, 1000)
-    return () => { if (timer.current) clearTimeout(timer.current) }
-  }, [userId, agentStates, tweaks, ready])
+async function persistSettings(userId: string, agentStates: AgentStates, tweaks: Tweaks) {
+  const { error } = await supabase.from('user_settings').upsert({
+    user_id: userId,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    agent_states: agentStates as any,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    tweaks: tweaks as any,
+    updated_at: new Date().toISOString(),
+  })
+  return error
 }
 
 export default function AppShell({ user, userId, onLogout }: { user: User; userId: string; onLogout: () => void }) {
@@ -47,15 +40,28 @@ export default function AppShell({ user, userId, onLogout }: { user: User; userI
   const [tweaksOpen, setTweaksOpen] = useState(false)
   const [settingsReady, setSettingsReady] = useState(false)
 
+  const agentStatesRef = useRef(agentStates)
+  const tweaksRef = useRef(tweaks)
+  agentStatesRef.current = agentStates
+  tweaksRef.current = tweaks
+
+  const addToast = useCallback((msg: string, type: 'success' | 'error' = 'success') => {
+    const id = Date.now()
+    setToasts(p => [...p, { id, msg, type }])
+    setTimeout(() => setToasts(p => p.filter(t => t.id !== id)), 3200)
+  }, [])
+
   // Load persisted settings on mount
   useEffect(() => {
     supabase
       .from('user_settings')
       .select('agent_states, tweaks')
       .eq('user_id', userId)
-      .single()
-      .then(({ data }) => {
-        if (data) {
+      .maybeSingle()                          // won't crash if no row yet
+      .then(({ data, error }) => {
+        if (error) {
+          addToast('Could not load your settings', 'error')
+        } else if (data) {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           if (data.agent_states) setAgentStates(data.agent_states as any as AgentStates)
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -63,15 +69,29 @@ export default function AppShell({ user, userId, onLogout }: { user: User; userI
         }
         setSettingsReady(true)
       })
-  }, [userId])
+  }, [userId, addToast])
 
-  useDebouncedPersist(userId, agentStates, tweaks, settingsReady)
+  // Debounced persist — 1 second after last change
+  const persistTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => {
+    if (!settingsReady) return
+    if (persistTimer.current) clearTimeout(persistTimer.current)
+    persistTimer.current = setTimeout(async () => {
+      const error = await persistSettings(userId, agentStates, tweaks)
+      if (error) addToast('Settings failed to save', 'error')
+    }, 1000)
+    return () => { if (persistTimer.current) clearTimeout(persistTimer.current) }
+  }, [userId, agentStates, tweaks, settingsReady, addToast])
 
-  const addToast = useCallback((msg: string, type: 'success' | 'error' = 'success') => {
-    const id = Date.now()
-    setToasts(p => [...p, { id, msg, type }])
-    setTimeout(() => setToasts(p => p.filter(t => t.id !== id)), 3200)
-  }, [])
+  // Flush pending save on page close so no changes are lost
+  useEffect(() => {
+    const flush = () => {
+      if (!settingsReady) return
+      persistSettings(userId, agentStatesRef.current, tweaksRef.current)
+    }
+    window.addEventListener('beforeunload', flush)
+    return () => window.removeEventListener('beforeunload', flush)
+  }, [userId, settingsReady])
 
   const toggleAgent = (id: AgentId) =>
     setAgentStates(p => ({ ...p, [id]: p[id] === 'running' ? 'paused' : 'running' }))
