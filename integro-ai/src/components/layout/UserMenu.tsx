@@ -6,6 +6,7 @@ interface Props {
   onNavigate: (view: string) => void
   onLogout: () => void
   onClose: () => void
+  direction?: 'down' | 'up'
 }
 
 const MENU_ITEMS = [
@@ -15,7 +16,7 @@ const MENU_ITEMS = [
   { id: 'connections',  icon: '🔌', label: 'Connections' },
 ]
 
-export default function UserMenu({ user, onNavigate, onLogout, onClose }: Props) {
+export default function UserMenu({ user, onNavigate, onLogout, onClose, direction = 'down' }: Props) {
   const ref = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -34,7 +35,7 @@ export default function UserMenu({ user, onNavigate, onLogout, onClose }: Props)
   }
 
   return (
-    <div className="user-menu" ref={ref}>
+    <div className={`user-menu${direction === 'up' ? ' user-menu--up' : ''}`} ref={ref}>
       <div className="user-menu-header">
         <div className="user-menu-avatar">{user.initials}</div>
         <div>

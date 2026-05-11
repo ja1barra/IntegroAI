@@ -1,14 +1,19 @@
+import { useState } from 'react'
 import type { User } from '../../types'
+import UserMenu from './UserMenu'
 
 interface Props {
   user: User
   onLogout: () => void
+  onNavigate: (v: string) => void
   onToggleNotif: () => void
   notifOpen: boolean
   children?: React.ReactNode
 }
 
-export default function AppHeader({ user, onLogout, onToggleNotif, notifOpen, children }: Props) {
+export default function AppHeader({ user, onLogout, onNavigate, onToggleNotif, notifOpen, children }: Props) {
+  const [menuOpen, setMenuOpen] = useState(false)
+
   return (
     <header className="app-header">
       <div className="app-logo">INTEGRO AI <span className="brand-tag">Beta</span></div>
@@ -21,7 +26,24 @@ export default function AppHeader({ user, onLogout, onToggleNotif, notifOpen, ch
           </div>
           {notifOpen && children}
         </div>
-        <div className="header-avatar" title="Sign out" onClick={onLogout}>{user.initials}</div>
+
+        <div style={{ position: 'relative' }}>
+          <div
+            className="header-avatar"
+            title="Account"
+            onClick={e => { e.stopPropagation(); setMenuOpen(p => !p) }}
+          >
+            {user.initials}
+          </div>
+          {menuOpen && (
+            <UserMenu
+              user={user}
+              onNavigate={v => { onNavigate(v); setMenuOpen(false) }}
+              onLogout={onLogout}
+              onClose={() => setMenuOpen(false)}
+            />
+          )}
+        </div>
       </div>
     </header>
   )
