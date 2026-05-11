@@ -1,14 +1,14 @@
 import { useState } from 'react'
 import { supabase } from '../lib/supabase'
 
-export default function SignIn() {
+export default function SignIn({ initialError }: { initialError?: string | null }) {
   const [mode, setMode] = useState<'signin' | 'signup'>('signin')
   const [email, setEmail] = useState('')
   const [pw, setPw] = useState('')
   const [name, setName] = useState('')
   const [org, setOrg] = useState('')
   const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
+  const [error, setError] = useState(initialError ?? '')
   const [success, setSuccess] = useState('')
   const [shake, setShake] = useState(false)
 
