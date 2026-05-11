@@ -142,7 +142,7 @@ export default function AppShell({ user, userId, onLogout }: { user: User; userI
           <PlaybooksView     active={view === 'playbooks'}        addToast={addToast} />
           <ReportsView       active={view === 'reports'}          addToast={addToast} />
           <IntegrationsView  active={view === 'integrations'}     addToast={addToast} />
-          <TeamView          active={view === 'team'}             addToast={addToast} />
+          <TeamView          active={view === 'team'}             addToast={addToast} user={user} />
           <ProfileView       active={view === 'profile'}          user={user} />
           <AcademyView       active={view === 'academy'} />
         </main>
