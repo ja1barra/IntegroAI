@@ -126,7 +126,7 @@ export default function AppShell({ user, userId, onLogout }: { user: User; userI
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
-      <AppHeader user={user} onLogout={onLogout} onToggleNotif={() => setNotifOpen(p => !p)} notifOpen={notifOpen}>
+      <AppHeader user={user} onLogout={onLogout} onNavigate={setView} onToggleNotif={() => setNotifOpen(p => !p)} notifOpen={notifOpen}>
         <NotificationPanel />
       </AppHeader>
 

@@ -64,6 +64,7 @@ export default function Sidebar({ view, setView, agentStates, user, onLogout }: 
             onNavigate={setView}
             onLogout={onLogout}
             onClose={() => setMenuOpen(false)}
+            direction="up"
           />
         )}
         <div

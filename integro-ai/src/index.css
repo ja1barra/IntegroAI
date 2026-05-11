@@ -412,7 +412,10 @@ body {
 
 /* ── User menu ──────────────────────────────── */
 .user-menu {
-  position:absolute; bottom:calc(100% + 6px); left:12px; right:12px;
+  position:absolute; top:calc(100% + 8px); right:0; width:240px;
+}
+.user-menu.user-menu--up {
+  top:auto; bottom:calc(100% + 6px); left:0; right:0; width:auto;
   background: rgba(248,244,238,0.97);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
