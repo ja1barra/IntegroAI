@@ -5,6 +5,7 @@ import {
   MOCK_APOLLO_CONTACTS, MOCK_SLACK_CHANNELS,
   MOCK_SYNC_EVENTS, OAUTH_SCOPES, AGENT_DATA_TAGS,
 } from '../../lib/integrations/mock'
+import { LOGO_MAP } from './logos/IntegrationLogos'
 
 type Tab = 'overview' | 'livedata' | 'synclog' | 'permissions' | 'agentmapping'
 
@@ -172,6 +173,7 @@ export default function DetailPanel({ integration, onClose, onDisconnect, onConf
   const syncEvents = MOCK_SYNC_EVENTS[integration.provider] ?? []
   const stats = STATS[integration.provider] ?? STATS.hubspot
   const agentTags = AGENT_DATA_TAGS[integration.provider] ?? {}
+  const PanelLogo = LOGO_MAP[integration.id]
 
   const tabs: { id: Tab; label: string }[] = [
     { id: 'overview', label: 'Overview' },
@@ -185,8 +187,8 @@ export default function DetailPanel({ integration, onClose, onDisconnect, onConf
     <div className="card fade-in" style={{ marginBottom: 24, padding: 0, overflow: 'hidden' }}>
       {/* Header */}
       <div style={{ padding: '16px 22px', borderBottom: '1px solid rgba(255,255,255,0.4)', display: 'flex', alignItems: 'center', gap: 14, background: 'rgba(255,255,255,0.25)' }}>
-        <div style={{ width: 40, height: 40, borderRadius: 10, background: integration.logoColor, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-          <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 13, fontWeight: 700, color: '#fff' }}>{integration.logo}</span>
+        <div className="detailLogo" style={{ background: integration.logoBg }}>
+          {PanelLogo && <PanelLogo size={26} />}
         </div>
         <div style={{ flex: 1 }}>
           <div style={{ fontSize: 14, fontWeight: 600 }}>{integration.name}</div>

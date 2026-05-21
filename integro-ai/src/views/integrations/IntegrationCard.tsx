@@ -1,11 +1,11 @@
+import { LOGO_MAP } from './logos/IntegrationLogos'
 import type { IntegrationStatus } from '../../lib/integrations/types'
 
 export interface IntegrationCardProps {
   id: string
   name: string
   description: string
-  logo: string
-  logoColor: string
+  logoBg: string
   tags: string[]
   status: IntegrationStatus
   lastSync?: string
@@ -23,9 +23,10 @@ const STATUS_CONFIG: Record<IntegrationStatus, { label: string; bg: string; colo
 }
 
 export default function IntegrationCard({
-  name, description, logo, logoColor, tags, status, lastSync, recordCount, onClick, selected, compact,
+  id, name, description, logoBg, tags, status, lastSync, recordCount, onClick, selected, compact,
 }: IntegrationCardProps) {
   const badge = STATUS_CONFIG[status]
+  const LogoComponent = LOGO_MAP[id]
 
   const cardStyle: React.CSSProperties = {
     cursor: 'pointer',
@@ -41,12 +42,12 @@ export default function IntegrationCard({
   if (compact) {
     return (
       <div
-        className="card"
+        className="card availCard"
         style={{ ...cardStyle, padding: '14px 16px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, textAlign: 'center' }}
         onClick={onClick}
       >
-        <div style={{ width: 40, height: 40, borderRadius: 10, background: logoColor, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-          <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 12, fontWeight: 700, color: '#fff', letterSpacing: '0.05em' }}>{logo}</span>
+        <div className="availIcon" style={{ background: logoBg, borderRadius: 10, width: 44, height: 44 }}>
+          {LogoComponent && <LogoComponent size={28} />}
         </div>
         <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--ink)' }}>{name}</div>
         {status !== 'available' && (
@@ -64,14 +65,14 @@ export default function IntegrationCard({
   }
 
   return (
-    <div className="card" style={cardStyle} onClick={onClick}>
+    <div className="card intCard" style={cardStyle} onClick={onClick}>
       {selected && (
         <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 2, background: 'linear-gradient(90deg,var(--orange),rgba(212,80,26,0.4))', borderRadius: '13px 13px 0 0' }} />
       )}
 
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14, marginBottom: 12 }}>
-        <div style={{ width: 48, height: 48, borderRadius: 12, background: logoColor, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-          <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 14, fontWeight: 700, color: '#fff', letterSpacing: '0.05em' }}>{logo}</span>
+        <div className="intLogoWrap" style={{ background: logoBg }}>
+          {LogoComponent && <LogoComponent size={26} />}
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3, flexWrap: 'wrap' }}>

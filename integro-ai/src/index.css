@@ -807,6 +807,41 @@ body {
 .health-detail-label { color:var(--ink-l); }
 .health-detail-val   { font-weight:500; }
 
+/* ── Integrations — logo grayscale/hover system ──────────────── */
+.intLogoWrap {
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: background 0.25s;
+}
+.intLogoWrap svg { filter: grayscale(1) opacity(0.42); transition: filter 0.25s; }
+.intCard:hover .intLogoWrap svg { filter: grayscale(0) opacity(1); }
+
+.availIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+}
+.availIcon svg { filter: grayscale(1) opacity(0.4); transition: filter 0.25s; }
+.availCard:hover .availIcon svg { filter: grayscale(0) opacity(1); }
+
+.detailLogo {
+  width: 46px;
+  height: 46px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.detailLogo svg { filter: grayscale(0) opacity(1); }
+
 /* ── Responsive ──────────────────────────────── */
 @media (max-width:900px) {
   #page-signin { grid-template-columns:1fr; }

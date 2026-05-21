@@ -32,6 +32,7 @@ export interface Integration {
   name: string
   logo: string
   logoColor: string
+  logoBg: string
   description: string
   tags: string[]
   status: IntegrationStatus

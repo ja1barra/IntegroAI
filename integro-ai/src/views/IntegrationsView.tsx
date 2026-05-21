@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase'
 import IntegrationCard from './integrations/IntegrationCard'
 import DetailPanel from './integrations/DetailPanel'
 import ConnectModal from './integrations/ConnectModal'
+import { RequestIcon } from './integrations/logos/IntegrationLogos'
 import type { Integration, Provider } from '../lib/integrations/types'
 
 const DEFAULT_CONFIG: Integration['config'] = {
@@ -13,7 +14,7 @@ const DEFAULT_CONFIG: Integration['config'] = {
 
 const ACTIVE_INTEGRATIONS: Integration[] = [
   {
-    id: 'hubspot', provider: 'hubspot', name: 'HubSpot CRM', logo: 'HS', logoColor: '#ff7a59',
+    id: 'hubspot', provider: 'hubspot', name: 'HubSpot CRM', logo: 'HS', logoColor: '#ff7a59', logoBg: '#fff3ee',
     description: 'Two-way sync of contacts, deals, and timeline activities. Powers Outbound and Customer Success agents.',
     tags: ['CRM', 'Contacts', 'Deals'],
     status: 'connected', authType: 'private_app_token',
@@ -21,7 +22,7 @@ const ACTIVE_INTEGRATIONS: Integration[] = [
     config: { ...DEFAULT_CONFIG, outbound: true, demandGen: true, customerSuccess: true, revenueIntelligence: false },
   },
   {
-    id: 'apollo', provider: 'apollo', name: 'Apollo.io', logo: 'AP', logoColor: '#3b4eeb',
+    id: 'apollo', provider: 'apollo', name: 'Apollo.io', logo: 'AP', logoColor: '#3b4eeb', logoBg: '#eef3ff',
     description: 'Prospect enrichment, contact search, and sequence enrollment. 8,432 prospects synced.',
     tags: ['Outbound', 'Prospecting', 'Enrichment'],
     status: 'connected', authType: 'api_key',
@@ -29,7 +30,7 @@ const ACTIVE_INTEGRATIONS: Integration[] = [
     config: { ...DEFAULT_CONFIG, outbound: true, demandGen: true, customerSuccess: false, revenueIntelligence: false },
   },
   {
-    id: 'slack', provider: 'slack', name: 'Slack', logo: 'SL', logoColor: '#611f69',
+    id: 'slack', provider: 'slack', name: 'Slack', logo: 'SL', logoColor: '#611f69', logoBg: '#f0f7ff',
     description: 'Agent alerts, deal notifications, approval requests, and churn risk escalations.',
     tags: ['Comms', 'Alerts', 'Approvals'],
     status: 'connected', authType: 'api_key',
@@ -37,7 +38,7 @@ const ACTIVE_INTEGRATIONS: Integration[] = [
     config: { ...DEFAULT_CONFIG, outbound: true, demandGen: true, customerSuccess: true, revenueIntelligence: false, syncDeals: false, syncActivities: false },
   },
   {
-    id: 'klaviyo', provider: 'klaviyo', name: 'Klaviyo', logo: 'KL', logoColor: '#006bff',
+    id: 'klaviyo', provider: 'klaviyo', name: 'Klaviyo', logo: 'KL', logoColor: '#006bff', logoBg: '#fdf0f0',
     description: 'Email list management, campaign triggers, and subscriber lifecycle data for Demand Gen.',
     tags: ['Email', 'Marketing', 'Lists'],
     status: 'error', authType: 'api_key',
@@ -47,13 +48,13 @@ const ACTIVE_INTEGRATIONS: Integration[] = [
 ]
 
 const AVAILABLE_INTEGRATIONS: Integration[] = [
-  { id: 'salesforce', provider: 'salesforce', name: 'Salesforce', logo: 'SF', logoColor: '#00a1e0', description: 'Enterprise CRM with advanced reporting and forecasting.', tags: ['CRM', 'Enterprise'], status: 'available', authType: 'oauth', config: { ...DEFAULT_CONFIG } },
-  { id: 'outreach', provider: 'outreach', name: 'Outreach', logo: 'OR', logoColor: '#5951e5', description: 'Sales engagement platform with sequence automation.', tags: ['Outbound', 'Sequences'], status: 'available', authType: 'oauth', config: { ...DEFAULT_CONFIG } },
-  { id: 'linkedin', provider: 'linkedin', name: 'LinkedIn Sales Nav', logo: 'LI', logoColor: '#0077b5', description: 'Premium prospecting, InMail automation, and social selling.', tags: ['Outbound', 'Social'], status: 'available', authType: 'oauth', config: { ...DEFAULT_CONFIG } },
-  { id: 'gong', provider: 'gong', name: 'Gong', logo: 'GO', logoColor: '#8b2fc9', description: 'Revenue intelligence from call recordings and coaching signals.', tags: ['Intelligence', 'Calls'], status: 'available', authType: 'api_key', config: { ...DEFAULT_CONFIG } },
-  { id: 'intercom', provider: 'intercom', name: 'Intercom', logo: 'IC', logoColor: '#1f8dd6', description: 'Customer success messaging and product usage signals.', tags: ['Customer Success', 'Chat'], status: 'available', authType: 'oauth', config: { ...DEFAULT_CONFIG } },
-  { id: 'zapier', provider: 'zapier', name: 'Zapier', logo: 'ZP', logoColor: '#ff4a00', description: 'Webhook automation and 5,000+ app integrations.', tags: ['Automation', 'Webhooks'], status: 'available', authType: 'api_key', config: { ...DEFAULT_CONFIG } },
-  { id: 'ga4', provider: 'ga4', name: 'Google Analytics 4', logo: 'GA', logoColor: '#e37400', description: 'Web traffic, conversion tracking, and campaign attribution.', tags: ['Analytics', 'Marketing'], status: 'available', authType: 'oauth', config: { ...DEFAULT_CONFIG } },
+  { id: 'salesforce', provider: 'salesforce', name: 'Salesforce',          logo: 'SF', logoColor: '#00a1e0', logoBg: '#e8f5fe', description: 'Enterprise CRM with advanced reporting and forecasting.',                    tags: ['CRM', 'Enterprise'],         status: 'available', authType: 'oauth',   config: { ...DEFAULT_CONFIG } },
+  { id: 'outreach',   provider: 'outreach',   name: 'Outreach',            logo: 'OR', logoColor: '#5951e5', logoBg: '#f0eeff', description: 'Sales engagement platform with sequence automation.',                       tags: ['Outbound', 'Sequences'],     status: 'available', authType: 'oauth',   config: { ...DEFAULT_CONFIG } },
+  { id: 'linkedin',   provider: 'linkedin',   name: 'LinkedIn Sales Nav',  logo: 'LI', logoColor: '#0077b5', logoBg: '#e8f2fa', description: 'Premium prospecting, InMail automation, and social selling.',              tags: ['Outbound', 'Social'],        status: 'available', authType: 'oauth',   config: { ...DEFAULT_CONFIG } },
+  { id: 'gong',       provider: 'gong',       name: 'Gong',                logo: 'GO', logoColor: '#8b2fc9', logoBg: '#f2eaff', description: 'Revenue intelligence from call recordings and coaching signals.',           tags: ['Intelligence', 'Calls'],     status: 'available', authType: 'api_key', config: { ...DEFAULT_CONFIG } },
+  { id: 'intercom',   provider: 'intercom',   name: 'Intercom',            logo: 'IC', logoColor: '#1f8dd6', logoBg: '#e8f4ff', description: 'Customer success messaging and product usage signals.',                    tags: ['Customer Success', 'Chat'],  status: 'available', authType: 'oauth',   config: { ...DEFAULT_CONFIG } },
+  { id: 'zapier',     provider: 'zapier',     name: 'Zapier',              logo: 'ZP', logoColor: '#ff4a00', logoBg: '#fff1ec', description: 'Webhook automation and 5,000+ app integrations.',                         tags: ['Automation', 'Webhooks'],    status: 'available', authType: 'api_key', config: { ...DEFAULT_CONFIG } },
+  { id: 'ga4',        provider: 'ga4',        name: 'Google Analytics 4',  logo: 'GA', logoColor: '#e37400', logoBg: '#fff8e8', description: 'Web traffic, conversion tracking, and campaign attribution.',              tags: ['Analytics', 'Marketing'],    status: 'available', authType: 'oauth',   config: { ...DEFAULT_CONFIG } },
 ]
 
 function formatSyncTime(): string {
@@ -262,14 +263,14 @@ export default function IntegrationsView({ active, addToast }: { active: boolean
               onClick={() => handleConnectClick(int)}
             />
           ))}
-          {/* Request card */}
+          {/* Request card — static gray, no hover color change */}
           <div
             className="card"
             style={{ padding: '14px 16px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, textAlign: 'center', cursor: 'pointer' }}
             onClick={() => addToast("Integration request sent — we'll review it shortly ✓")}
           >
-            <div style={{ width: 40, height: 40, borderRadius: 10, background: 'rgba(122,114,104,0.12)', border: '1px dashed rgba(122,114,104,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <span style={{ fontSize: 20, color: 'var(--ink-l)' }}>+</span>
+            <div style={{ width: 44, height: 44, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <RequestIcon size={36} />
             </div>
             <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--ink)' }}>Request</div>
             <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 10, letterSpacing: '0.07em', textTransform: 'uppercase', color: 'var(--ink-l)' }}>
