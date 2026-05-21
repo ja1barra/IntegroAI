@@ -1,4 +1,5 @@
 import type { User } from '../types'
+import { Icon } from '../components/ui/Icon'
 
 interface Props { active: boolean; addToast: (m: string) => void; user: User }
 
@@ -8,7 +9,7 @@ export default function TeamView({ active, addToast, user }: Props) {
       <div className="view-header">
         <div><div className="view-subtitle">Access Control</div><h1 className="display view-title">Team</h1></div>
         <div className="view-actions">
-          <button className="btn-sm btn-sm-primary" onClick={() => addToast('Invite sent ✓')}>+ Invite Member</button>
+          <button className="btn-sm btn-sm-primary" onClick={() => addToast('Invite sent')}>+ Invite Member</button>
         </div>
       </div>
       <div className="card">
@@ -27,7 +28,11 @@ export default function TeamView({ active, addToast, user }: Props) {
               <td>
                 <span style={{ fontFamily:"'DM Mono',monospace", fontSize:9, letterSpacing:'0.06em', padding:'2px 8px', borderRadius:'var(--radius-pill)', background:'rgba(212,80,26,0.1)', color:'var(--orange)' }}>Admin</span>
               </td>
-              <td><span className="card-action" onClick={() => addToast('Managing your own account — coming soon')}>Manage →</span></td>
+              <td>
+                <span className="card-action" onClick={() => addToast('Managing your own account — coming soon')} style={{ display:'inline-flex', alignItems:'center', gap:4 }}>
+                  Manage <Icon name="arrowRight" size={10} />
+                </span>
+              </td>
             </tr>
           </tbody>
         </table>

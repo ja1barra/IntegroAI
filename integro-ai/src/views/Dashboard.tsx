@@ -2,6 +2,7 @@ import { useState } from 'react'
 import StatCard from '../components/ui/StatCard'
 import AgentPill from '../components/ui/AgentPill'
 import EmptyState from '../components/ui/EmptyState'
+import { Icon } from '../components/ui/Icon'
 import type { SharedViewProps, Approval } from '../types'
 
 export default function Dashboard({ active, onNavigate, agentStates, addToast }: SharedViewProps & { onNavigate: (v: string) => void }) {
@@ -52,7 +53,9 @@ export default function Dashboard({ active, onNavigate, agentStates, addToast }:
             </div>
             <div className="agent-card-footer">
               <span className="agent-last-run">Connect a CRM to sync data</span>
-              <span className="agent-open-link">Open →</span>
+              <span className="agent-open-link" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                Open <Icon name="arrowRight" size={11} />
+              </span>
             </div>
           </div>
         ))}
@@ -68,7 +71,7 @@ export default function Dashboard({ active, onNavigate, agentStates, addToast }:
             </div>
           </div>
           <EmptyState
-            icon="⚡"
+            icon="bolt"
             title="No activity yet"
             desc="Agent actions will appear here once your CRM is connected and agents start running."
             action={{ label: 'Connect Integrations', onClick: () => onNavigate('integrations') }}
@@ -80,7 +83,9 @@ export default function Dashboard({ active, onNavigate, agentStates, addToast }:
           </div>
           {approvals.length === 0 ? (
             <div style={{ textAlign:'center', padding:'28px 16px', color:'var(--ink-l)' }}>
-              <div style={{ fontFamily:"'Bebas Neue',sans-serif", fontSize:36, color:'#3ecf8e', marginBottom:4 }}>✓</div>
+              <div style={{ display:'flex', justifyContent:'center', marginBottom:4, color:'#3ecf8e' }}>
+                <Icon name="checkCircle" size={36} />
+              </div>
               <div style={{ fontSize:13 }}>Nothing pending</div>
             </div>
           ) : null}

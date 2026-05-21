@@ -4,6 +4,7 @@ import IntegrationCard from './integrations/IntegrationCard'
 import DetailPanel from './integrations/DetailPanel'
 import ConnectModal from './integrations/ConnectModal'
 import { RequestIcon } from './integrations/logos/IntegrationLogos'
+import { Icon } from '../components/ui/Icon'
 import type { Integration, Provider } from '../lib/integrations/types'
 
 const DEFAULT_CONFIG: Integration['config'] = {
@@ -114,7 +115,7 @@ export default function IntegrationsView({ active, addToast }: { active: boolean
       i.status === 'connected' ? { ...i, lastSync: 'just now' } : i
     ))
     setSyncing(false)
-    addToast(`All integrations synced at ${now} ✓`)
+    addToast(`All integrations synced at ${now}`)
   }
 
   const handleConnectClick = (int: Integration) => {
@@ -126,7 +127,7 @@ export default function IntegrationsView({ active, addToast }: { active: boolean
     setIntegrations(prev => prev.map(i =>
       i.id === int.id ? { ...i, status: 'connected', lastSync: 'just now' } : i
     ))
-    addToast(`${int.name} connected ✓`)
+    addToast(`${int.name} connected`)
     try {
       await supabase.from('integrations').upsert({
         provider: int.provider,
@@ -179,7 +180,13 @@ export default function IntegrationsView({ active, addToast }: { active: boolean
             onClick={handleSyncAll}
             disabled={syncing}
           >
-            {syncing ? <span className="btn-loading"><span />Syncing…</span> : '↻ Sync All'}
+            {syncing ? (
+              <span className="btn-loading"><span />Syncing...</span>
+            ) : (
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                <Icon name="sync" size={13} /> Sync All
+              </span>
+            )}
           </button>
           <button
             className="btn-sm btn-sm-primary"
@@ -250,8 +257,11 @@ export default function IntegrationsView({ active, addToast }: { active: boolean
       <div style={{ marginBottom: 24 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
           <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 9, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--ink-l)' }}>Available Integrations</div>
-          <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 10, color: 'var(--orange)', cursor: 'pointer' }} onClick={() => addToast('Full integration marketplace — coming soon')}>
-            View all →
+          <span
+            style={{ fontFamily: "'DM Mono',monospace", fontSize: 10, color: 'var(--orange)', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4 }}
+            onClick={() => addToast('Full integration marketplace — coming soon')}
+          >
+            View all <Icon name="arrowRight" size={10} />
           </span>
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 10 }}>
@@ -263,11 +273,11 @@ export default function IntegrationsView({ active, addToast }: { active: boolean
               onClick={() => handleConnectClick(int)}
             />
           ))}
-          {/* Request card — static gray, no hover color change */}
+          {/* Request card */}
           <div
             className="card"
             style={{ padding: '14px 16px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, textAlign: 'center', cursor: 'pointer' }}
-            onClick={() => addToast("Integration request sent — we'll review it shortly ✓")}
+            onClick={() => addToast("Integration request sent — we'll review it shortly")}
           >
             <div style={{ width: 44, height: 44, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <RequestIcon size={36} />

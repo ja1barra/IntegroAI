@@ -1,4 +1,5 @@
 import type { Tweaks } from '../../types'
+import { Icon } from '../ui/Icon'
 
 interface Props {
   tweaks: Tweaks
@@ -19,7 +20,9 @@ export default function TweaksPanel({ tweaks, setTweak, onClose }: Props) {
     <div style={{ position: 'fixed', bottom: 24, right: 24, width: 230, background: 'var(--glass)', backdropFilter: 'var(--glass-blur)', WebkitBackdropFilter: 'var(--glass-blur)', border: '1px solid var(--glass-border)', borderRadius: 'var(--radius)', boxShadow: 'var(--glass-shadow)', zIndex: 400, overflow: 'hidden' }}>
       <div style={{ padding: '10px 14px', background: 'var(--ink)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--cream)' }}>Tweaks</span>
-        <span style={{ cursor: 'pointer', color: 'rgba(245,240,232,0.45)', fontSize: 18, lineHeight: 1 }} onClick={onClose}>×</span>
+        <span style={{ cursor: 'pointer', color: 'rgba(245,240,232,0.45)', lineHeight: 1, display: 'inline-flex', alignItems: 'center' }} onClick={onClose}>
+          <Icon name="close" size={14} />
+        </span>
       </div>
       <div style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 14 }}>
         <div>

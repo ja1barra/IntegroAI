@@ -28,7 +28,7 @@ export default function ReportsView({ active, addToast }: { active: boolean; add
 
       <div className="card">
         <EmptyState
-          icon="📊"
+          icon="reports"
           title="No report data yet"
           desc={`Connect your CRM and tools to start seeing ${range} performance reports across pipeline, meetings, MQLs, and more.`}
           action={{ label: 'Connect Integrations', onClick: () => addToast('Go to Integrations in the sidebar') }}

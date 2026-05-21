@@ -1,3 +1,6 @@
+import { Icon } from './Icon'
+import type { IconName } from './Icon'
+
 interface Props {
   icon?: string
   title: string
@@ -5,13 +8,13 @@ interface Props {
   action?: { label: string; onClick: () => void }
 }
 
-export default function EmptyState({ icon = '🔌', title, desc, action }: Props) {
+export default function EmptyState({ icon = 'integrations', title, desc, action }: Props) {
   return (
     <div style={{
       display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
       padding: '48px 24px', textAlign: 'center', gap: 12,
     }}>
-      <div style={{ fontSize: 36, opacity: 0.35 }}>{icon}</div>
+      <div style={{ opacity: 0.35 }}><Icon name={icon as IconName} size={36} /></div>
       <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--ink)' }}>{title}</div>
       <div style={{ fontSize: 13, color: 'var(--ink-l)', maxWidth: 280, lineHeight: 1.55 }}>{desc}</div>
       {action && (

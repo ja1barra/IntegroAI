@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import type { User } from '../../types'
 import UserMenu from './UserMenu'
+import { Icon } from '../ui/Icon'
 
 interface Props {
   user: User
@@ -22,7 +23,8 @@ export default function AppHeader({ user, onLogout, onNavigate, onToggleNotif, n
       <div className="header-right">
         <div style={{ position: 'relative' }}>
           <div className="header-notif" onClick={e => { e.stopPropagation(); onToggleNotif() }}>
-            🔔<div className="notif-badge" />
+            <Icon name="alert" size={16} />
+            <div className="notif-badge" />
           </div>
           {notifOpen && children}
         </div>

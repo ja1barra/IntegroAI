@@ -3,9 +3,9 @@ import type { AgentStatus } from '../../types'
 interface Props { status: AgentStatus }
 
 const map: Record<AgentStatus, [string, string]> = {
-  running: ['pill-running', '● Running'],
-  paused:  ['pill-paused',  '⏸ Paused'],
-  idle:    ['pill-idle',    '○ Idle'],
+  running: ['pill-running', 'Running'],
+  paused:  ['pill-paused',  'Paused'],
+  idle:    ['pill-idle',    'Idle'],
 }
 
 export default function AgentPill({ status }: Props) {

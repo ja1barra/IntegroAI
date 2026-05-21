@@ -18,7 +18,7 @@ export default function PlaybookAgentView({ active, agentStates, toggleAgent, ad
           <div className="agent-view-sub">Win/loss analysis · Playbook generation · Coaching signals · Forecasting</div>
         </div>
         <div className="agent-controls">
-          <button className="control-btn" onClick={() => { toggleAgent('playbook-agent'); addToast(isRunning ? 'Agent paused' : 'Agent resumed ✓') }}>{isRunning ? 'Pause Agent' : 'Resume Agent'}</button>
+          <button className="control-btn" onClick={() => { toggleAgent('playbook-agent'); addToast(isRunning ? 'Agent paused' : 'Agent resumed') }}>{isRunning ? 'Pause Agent' : 'Resume Agent'}</button>
           <button className="control-btn">Settings</button>
           <button className="btn-sm btn-sm-primary" onClick={() => addToast('Playbook builder — coming soon')}>+ New Playbook</button>
         </div>
@@ -45,7 +45,7 @@ export default function PlaybookAgentView({ active, agentStates, toggleAgent, ad
         <div className="card">
           <div className="card-header"><div className="card-title">Active Playbooks</div><div className="card-action" onClick={() => addToast('Builder — coming soon')}>Create New</div></div>
           <EmptyState
-            icon="🧠"
+            icon="agents"
             title="No playbooks yet"
             desc="Create your first playbook manually or connect your CRM so the agent can generate them from your win/loss data."
             action={{ label: '+ New Playbook', onClick: () => addToast('Playbook builder — coming soon') }}

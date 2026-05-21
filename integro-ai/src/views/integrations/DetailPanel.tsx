@@ -6,6 +6,8 @@ import {
   MOCK_SYNC_EVENTS, OAUTH_SCOPES, AGENT_DATA_TAGS,
 } from '../../lib/integrations/mock'
 import { LOGO_MAP } from './logos/IntegrationLogos'
+import { Icon } from '../../components/ui/Icon'
+import type { IconName } from '../../components/ui/Icon'
 
 type Tab = 'overview' | 'livedata' | 'synclog' | 'permissions' | 'agentmapping'
 
@@ -27,11 +29,11 @@ function formatTimeAgo(isoString: string): string {
   return `${Math.floor(hrs / 24)}d ago`
 }
 
-const EVENT_ICON: Record<string, string> = {
-  sync_complete: '✓',
-  sync_failed: '✗',
-  webhook_received: '↓',
-  rate_limit: '⚠',
+const EVENT_ICON: Record<string, IconName> = {
+  sync_complete: 'checkCircle',
+  sync_failed: 'error',
+  webhook_received: 'download',
+  rate_limit: 'warning',
 }
 const EVENT_COLOR: Record<string, string> = {
   sync_complete: '#2a7d4f',
@@ -201,22 +203,24 @@ export default function DetailPanel({ integration, onClose, onDisconnect, onConf
           <button className="btn-sm btn-sm-ghost" style={{ fontSize: 11, color: '#c0392b', borderColor: 'rgba(192,57,43,0.3)' }} onClick={() => { onDisconnect(); addToast(`Disconnected from ${integration.name}`, 'error') }}>
             Disconnect
           </button>
-          <button className="btn-sm btn-sm-primary" style={{ fontSize: 11 }} onClick={() => addToast('Settings saved ✓')}>
+          <button className="btn-sm btn-sm-primary" style={{ fontSize: 11 }} onClick={() => addToast('Settings saved')}>
             Save Changes
           </button>
-          <button onClick={onClose} style={{ width: 28, height: 28, borderRadius: 8, border: 'none', background: 'rgba(122,114,104,0.12)', cursor: 'pointer', fontSize: 14, color: 'var(--ink-l)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
+          <button onClick={onClose} style={{ width: 28, height: 28, borderRadius: 8, border: 'none', background: 'rgba(122,114,104,0.12)', cursor: 'pointer', color: 'var(--ink-l)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <Icon name="close" size={14} />
+          </button>
         </div>
       </div>
 
       {/* Error banner */}
       {integration.status === 'error' && (
         <div style={{ padding: '10px 22px', background: '#fdecea', borderBottom: '1px solid rgba(192,57,43,0.2)', display: 'flex', alignItems: 'center', gap: 10 }}>
-          <span style={{ color: '#c0392b', fontSize: 14 }}>⚠</span>
+          <Icon name="warning" size={14} style={{ color: '#c0392b', flexShrink: 0 }} />
           <span style={{ fontSize: 12, color: '#c0392b', flex: 1 }}>
             {integration.errorMessage ?? 'Authentication expired — syncing is paused.'}
           </span>
-          <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 10, letterSpacing: '0.07em', textTransform: 'uppercase', color: '#c0392b', cursor: 'pointer' }}>
-            Re-authenticate →
+          <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 10, letterSpacing: '0.07em', textTransform: 'uppercase', color: '#c0392b', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+            Re-authenticate <Icon name="arrowRight" size={9} style={{ color: '#c0392b' }} />
           </span>
         </div>
       )}
@@ -243,7 +247,7 @@ export default function DetailPanel({ integration, onClose, onDisconnect, onConf
       {/* Tab content */}
       <div style={{ padding: '22px', maxHeight: 420, overflowY: 'auto' }}>
 
-        {/* ── OVERVIEW ── */}
+        {/* OVERVIEW */}
         {tab === 'overview' && (
           <div>
             <div className="stats-row" style={{ marginBottom: 20 }}>
@@ -251,7 +255,7 @@ export default function DetailPanel({ integration, onClose, onDisconnect, onConf
                 <div key={s.label} className="stat-card" style={{ padding: '14px 16px' }}>
                   <div className="stat-label">{s.label}</div>
                   <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 30, lineHeight: 1, color: integration.status === 'error' ? 'var(--ink-l)' : 'var(--ink)' }}>
-                    {integration.status === 'error' ? '—' : s.value}
+                    {integration.status === 'error' ? '--' : s.value}
                     {s.unit && <span style={{ color: 'var(--orange)', fontSize: 20 }}>{s.unit}</span>}
                   </div>
                 </div>
@@ -277,8 +281,11 @@ export default function DetailPanel({ integration, onClose, onDisconnect, onConf
                 </button>
               </div>
               {testMsg && (
-                <div style={{ fontSize: 11, marginTop: 6, color: testMsg.ok ? '#2a7d4f' : '#c0392b' }}>
-                  {testMsg.ok ? '✓' : '✗'} {testMsg.text}
+                <div style={{ fontSize: 11, marginTop: 6, color: testMsg.ok ? '#2a7d4f' : '#c0392b', display: 'flex', alignItems: 'center', gap: 5 }}>
+                  {testMsg.ok
+                    ? <Icon name="check" size={11} style={{ color: '#2a7d4f', flexShrink: 0 }} />
+                    : <Icon name="error" size={11} style={{ color: '#c0392b', flexShrink: 0 }} />
+                  } {testMsg.text}
                 </div>
               )}
             </div>
@@ -328,14 +335,18 @@ export default function DetailPanel({ integration, onClose, onDisconnect, onConf
                   value={`${window.location.origin}/api/webhooks/${integration.provider}`}
                 />
                 <button className="btn-sm btn-sm-ghost" style={{ flexShrink: 0, fontSize: 11 }} onClick={copyWebhook}>
-                  {copied ? '✓ Copied' : 'Copy'}
+                  {copied ? (
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                      <Icon name="check" size={11} /> Copied
+                    </span>
+                  ) : 'Copy'}
                 </button>
               </div>
             </div>
           </div>
         )}
 
-        {/* ── LIVE DATA ── */}
+        {/* LIVE DATA */}
         {tab === 'livedata' && (
           <div>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
@@ -343,7 +354,11 @@ export default function DetailPanel({ integration, onClose, onDisconnect, onConf
                 <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 9, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--ink-l)' }}>Live Data</span>
                 <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 9, letterSpacing: '0.06em', padding: '2px 8px', borderRadius: 100, background: 'rgba(245,166,35,0.15)', color: '#8a5000', border: '1px solid rgba(138,80,0,0.2)' }}>Demo</span>
               </div>
-              <button className="btn-sm btn-sm-ghost" style={{ fontSize: 10 }} onClick={loadLiveData}>↻ Refresh</button>
+              <button className="btn-sm btn-sm-ghost" style={{ fontSize: 10 }} onClick={loadLiveData}>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                  <Icon name="sync" size={11} /> Refresh
+                </span>
+              </button>
             </div>
 
             {liveLoading && (
@@ -354,7 +369,9 @@ export default function DetailPanel({ integration, onClose, onDisconnect, onConf
 
             {liveError && (
               <div style={{ padding: '20px', textAlign: 'center', borderRadius: 10, background: '#fdecea', border: '1px solid rgba(192,57,43,0.2)' }}>
-                <div style={{ fontSize: 22, marginBottom: 8 }}>⚠</div>
+                <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 8, color: '#c0392b' }}>
+                  <Icon name="warning" size={22} />
+                </div>
                 <div style={{ fontSize: 13, color: '#c0392b' }}>{liveError}</div>
               </div>
             )}
@@ -390,14 +407,14 @@ export default function DetailPanel({ integration, onClose, onDisconnect, onConf
                           <tr key={d.id}>
                             <td className="td-name">{d.properties.dealname}</td>
                             <td style={{ fontFamily: "'DM Mono',monospace", fontSize: 11 }}>
-                              {d.properties.amount ? `$${Number(d.properties.amount).toLocaleString()}` : '—'}
+                              {d.properties.amount ? `$${Number(d.properties.amount).toLocaleString()}` : '--'}
                             </td>
                             <td>
                               <span className="stage-badge stage-prospect" style={{ fontSize: 9 }}>
                                 {d.properties.dealstage.replace(/([A-Z])/g, ' $1').toLowerCase()}
                               </span>
                             </td>
-                            <td style={{ fontFamily: "'DM Mono',monospace", fontSize: 11 }}>{d.properties.closedate ? d.properties.closedate.slice(0, 10) : '—'}</td>
+                            <td style={{ fontFamily: "'DM Mono',monospace", fontSize: 11 }}>{d.properties.closedate ? d.properties.closedate.slice(0, 10) : '--'}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -450,7 +467,7 @@ export default function DetailPanel({ integration, onClose, onDisconnect, onConf
           </div>
         )}
 
-        {/* ── SYNC LOG ── */}
+        {/* SYNC LOG */}
         {tab === 'synclog' && (
           <div>
             {syncEvents.length === 0 && (
@@ -459,7 +476,7 @@ export default function DetailPanel({ integration, onClose, onDisconnect, onConf
             {syncEvents.map(event => (
               <div key={event.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 12, padding: '10px 0', borderBottom: '1px solid rgba(255,255,255,0.3)' }}>
                 <div style={{ width: 22, height: 22, borderRadius: '50%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: `${EVENT_COLOR[event.eventType]}18`, marginTop: 1 }}>
-                  <span style={{ fontSize: 11, color: EVENT_COLOR[event.eventType] }}>{EVENT_ICON[event.eventType]}</span>
+                  <Icon name={EVENT_ICON[event.eventType] ?? 'info'} size={11} style={{ color: EVENT_COLOR[event.eventType] }} />
                 </div>
                 <div style={{ flex: 1 }}>
                   <div style={{ fontSize: 12, color: 'var(--ink-m)', lineHeight: 1.4 }}>{event.message}</div>
@@ -473,7 +490,7 @@ export default function DetailPanel({ integration, onClose, onDisconnect, onConf
           </div>
         )}
 
-        {/* ── PERMISSIONS ── */}
+        {/* PERMISSIONS */}
         {tab === 'permissions' && (
           <div>
             {scopes.length === 0 ? (
@@ -507,9 +524,10 @@ export default function DetailPanel({ integration, onClose, onDisconnect, onConf
                       </td>
                       <td style={{ fontSize: 11, color: 'var(--ink-l)' }}>{scope.usedBy.join(', ')}</td>
                       <td style={{ textAlign: 'center' }}>
-                        <span style={{ fontSize: 14, color: scope.granted ? '#2a7d4f' : 'var(--ink-l)' }}>
-                          {scope.granted ? '✓' : '—'}
-                        </span>
+                        {scope.granted
+                          ? <Icon name="check" size={13} style={{ color: '#2a7d4f' }} />
+                          : <span style={{ color: 'var(--ink-l)', fontSize: 14 }}>-</span>
+                        }
                       </td>
                     </tr>
                   ))}
@@ -519,7 +537,7 @@ export default function DetailPanel({ integration, onClose, onDisconnect, onConf
           </div>
         )}
 
-        {/* ── AGENT MAPPING ── */}
+        {/* AGENT MAPPING */}
         {tab === 'agentmapping' && (
           <div>
             <div style={{ fontSize: 12, color: 'var(--ink-l)', marginBottom: 16, lineHeight: 1.5 }}>

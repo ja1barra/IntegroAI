@@ -21,7 +21,7 @@ export default function OutboundView({ active, agentStates, toggleAgent, addToas
           <div className="agent-view-sub">ICP identification · Sequence execution · Meeting booking · Handoff</div>
         </div>
         <div className="agent-controls">
-          <button className="control-btn" onClick={() => { toggleAgent('outbound'); addToast(isRunning ? 'Agent paused' : 'Agent resumed ✓') }}>{isRunning ? 'Pause Agent' : 'Resume Agent'}</button>
+          <button className="control-btn" onClick={() => { toggleAgent('outbound'); addToast(isRunning ? 'Agent paused' : 'Agent resumed') }}>{isRunning ? 'Pause Agent' : 'Resume Agent'}</button>
           <button className="control-btn">Settings</button>
           <button className="btn-sm btn-sm-primary" onClick={() => addToast('Sequence builder — coming soon')}>+ New Sequence</button>
         </div>
@@ -45,7 +45,7 @@ export default function OutboundView({ active, agentStates, toggleAgent, addToas
       {tab === 'overview' && (
         <div className="card">
           <EmptyState
-            icon="⚡"
+            icon="bolt"
             title="No outbound data yet"
             desc="Connect your CRM or outbound tool to start syncing prospects, sequences, and pipeline data."
             action={{ label: 'Connect Integrations', onClick: () => addToast('Go to Integrations in the sidebar') }}
@@ -57,10 +57,10 @@ export default function OutboundView({ active, agentStates, toggleAgent, addToas
         <div className="card">
           <div className="card-header">
             <div className="card-title">Prospects (0)</div>
-            <input className="form-input" style={{ width:200, padding:'6px 10px', fontSize:12 }} placeholder="Search…" value={search} onChange={e => setSearch(e.target.value)} />
+            <input className="form-input" style={{ width:200, padding:'6px 10px', fontSize:12 }} placeholder="Search..." value={search} onChange={e => setSearch(e.target.value)} />
           </div>
           <EmptyState
-            icon="👤"
+            icon="agents"
             title="No prospects yet"
             desc="Prospects will appear here once your CRM or outbound tool is connected."
           />
@@ -71,7 +71,7 @@ export default function OutboundView({ active, agentStates, toggleAgent, addToas
         <div className="card">
           <div className="card-header"><div className="card-title">All Sequences</div><div className="card-action" onClick={() => addToast('Sequence builder — coming soon')}>+ Create</div></div>
           <EmptyState
-            icon="📧"
+            icon="mail"
             title="No sequences yet"
             desc="Create your first sequence or connect your outbound tool to import existing ones."
             action={{ label: '+ New Sequence', onClick: () => addToast('Sequence builder — coming soon') }}

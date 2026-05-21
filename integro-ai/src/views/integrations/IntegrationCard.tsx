@@ -1,4 +1,5 @@
 import { LOGO_MAP } from './logos/IntegrationLogos'
+import { Icon } from '../../components/ui/Icon'
 import type { IntegrationStatus } from '../../lib/integrations/types'
 
 export interface IntegrationCardProps {
@@ -56,8 +57,8 @@ export default function IntegrationCard({
           </span>
         )}
         {status === 'available' && (
-          <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 10, letterSpacing: '0.07em', textTransform: 'uppercase', color: 'var(--orange)', cursor: 'pointer' }}>
-            Connect →
+          <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 10, letterSpacing: '0.07em', textTransform: 'uppercase', color: 'var(--orange)', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+            Connect <Icon name="arrowRight" size={9} />
           </span>
         )}
       </div>
@@ -110,8 +111,8 @@ export default function IntegrationCard({
             </span>
           )}
           {status === 'error' && (
-            <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 10, color: '#c0392b' }}>
-              ⚠ Auth expired — reconnect required
+            <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 10, color: '#c0392b', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+              <Icon name="warning" size={11} style={{ color: '#c0392b' }} /> Auth expired — reconnect required
             </span>
           )}
           {status === 'configure' && (
@@ -122,9 +123,9 @@ export default function IntegrationCard({
         </div>
         <span style={{
           fontFamily: "'DM Mono',monospace", fontSize: 10, letterSpacing: '0.07em', textTransform: 'uppercase',
-          color: 'var(--orange)', cursor: 'pointer',
+          color: 'var(--orange)', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4,
         }}>
-          {status === 'connected' || status === 'error' ? 'Configure →' : 'Connect →'}
+          {status === 'connected' || status === 'error' ? 'Configure' : 'Connect'} <Icon name="arrowRight" size={9} />
         </span>
       </div>
     </div>

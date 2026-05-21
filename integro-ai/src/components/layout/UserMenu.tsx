@@ -1,5 +1,7 @@
 import { useEffect, useRef } from 'react'
 import type { User } from '../../types'
+import { Icon } from '../ui/Icon'
+import type { IconName } from '../ui/Icon'
 
 interface Props {
   user: User
@@ -9,11 +11,11 @@ interface Props {
   direction?: 'down' | 'up'
 }
 
-const MENU_ITEMS = [
-  { id: 'profile',      icon: '👤', label: 'Profile' },
-  { id: 'settings',     icon: '⚙️',  label: 'Settings' },
-  { id: 'academy',      icon: '🎓', label: 'Academy' },
-  { id: 'connections',  icon: '🔌', label: 'Connections' },
+const MENU_ITEMS: { id: string; icon: IconName; label: string }[] = [
+  { id: 'profile',      icon: 'profile',      label: 'Profile' },
+  { id: 'settings',     icon: 'settings',     label: 'Settings' },
+  { id: 'academy',      icon: 'academy',      label: 'Academy' },
+  { id: 'connections',  icon: 'integrations', label: 'Connections' },
 ]
 
 export default function UserMenu({ user, onNavigate, onLogout, onClose, direction = 'down' }: Props) {
@@ -40,7 +42,7 @@ export default function UserMenu({ user, onNavigate, onLogout, onClose, directio
         <div className="user-menu-avatar">{user.initials}</div>
         <div>
           <div className="user-menu-name">{user.name}</div>
-          <div className="user-menu-role">{user.role} · {user.org}</div>
+          <div className="user-menu-role">{user.role} &middot; {user.org}</div>
         </div>
       </div>
 
@@ -48,7 +50,7 @@ export default function UserMenu({ user, onNavigate, onLogout, onClose, directio
 
       {MENU_ITEMS.map(item => (
         <button key={item.id} className="user-menu-item" onClick={() => handleItem(item.id)}>
-          <span className="user-menu-icon">{item.icon}</span>
+          <span className="user-menu-icon"><Icon name={item.icon} size={14} /></span>
           {item.label}
         </button>
       ))}
@@ -56,7 +58,7 @@ export default function UserMenu({ user, onNavigate, onLogout, onClose, directio
       <div className="user-menu-divider" />
 
       <button className="user-menu-item user-menu-signout" onClick={() => { onLogout(); onClose() }}>
-        <span className="user-menu-icon">→</span>
+        <span className="user-menu-icon"><Icon name="signout" size={14} /></span>
         Sign out
       </button>
     </div>

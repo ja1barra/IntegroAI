@@ -18,7 +18,7 @@ export default function SuccessView({ active, agentStates, toggleAgent, addToast
           <div className="agent-view-sub">Health monitoring · Churn risk · Expansion · Renewal tracking</div>
         </div>
         <div className="agent-controls">
-          <button className="control-btn" onClick={() => { toggleAgent('success'); addToast(isRunning ? 'Agent paused' : 'Agent resumed ✓') }}>{isRunning ? 'Pause Agent' : 'Resume Agent'}</button>
+          <button className="control-btn" onClick={() => { toggleAgent('success'); addToast(isRunning ? 'Agent paused' : 'Agent resumed') }}>{isRunning ? 'Pause Agent' : 'Resume Agent'}</button>
           <button className="control-btn">Settings</button>
           <button className="btn-sm btn-sm-primary" onClick={() => addToast('Account import — coming soon')}>+ Add Account</button>
         </div>
@@ -39,7 +39,7 @@ export default function SuccessView({ active, agentStates, toggleAgent, addToast
             <div className="card-title">Account Health Overview</div>
           </div>
           <EmptyState
-            icon="💎"
+            icon="customerSuccess"
             title="No accounts yet"
             desc="Connect your CRM to sync customer accounts and start tracking health scores."
             action={{ label: 'Connect CRM', onClick: () => addToast('Go to Integrations in the sidebar') }}
@@ -49,7 +49,7 @@ export default function SuccessView({ active, agentStates, toggleAgent, addToast
           <div className="card">
             <div className="card-header"><div className="card-title">Expansion Opportunities</div><span style={{ fontFamily:"'Bebas Neue',sans-serif", fontSize:18, color:'var(--ink-l)' }}>$--</span></div>
             <EmptyState
-              icon="📈"
+              icon="revenueIntelligence"
               title="No opportunities yet"
               desc="Expansion opportunities will appear once accounts are synced from your CRM."
             />

@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { testConnection as testHubspot } from '../../lib/integrations/hubspot'
 import { testConnection as testApollo } from '../../lib/integrations/apollo'
 import { testConnection as testSlack } from '../../lib/integrations/slack'
+import { Icon } from '../../components/ui/Icon'
 import type { Provider, TestResult } from '../../lib/integrations/types'
 
 interface ConnectConfig {
@@ -17,7 +18,7 @@ const CONFIGS: Partial<Record<Provider, ConnectConfig>> = {
   hubspot: {
     label: 'Private App Token',
     placeholder: 'pat-na1-xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx',
-    instructions: 'In HubSpot, go to Settings → Integrations → Private Apps. Create a new private app, grant the required scopes, and copy the access token.',
+    instructions: 'In HubSpot, go to Settings -> Integrations -> Private Apps. Create a new private app, grant the required scopes, and copy the access token.',
     scopes: ['crm.objects.contacts.read/write', 'crm.objects.deals.read/write', 'timeline'],
     docsLabel: 'HubSpot Private Apps docs',
     authType: 'private_app_token',
@@ -25,7 +26,7 @@ const CONFIGS: Partial<Record<Provider, ConnectConfig>> = {
   apollo: {
     label: 'API Key',
     placeholder: 'ap_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx',
-    instructions: 'In Apollo.io, go to Settings → Integrations → API. Generate a new API key and copy it here.',
+    instructions: 'In Apollo.io, go to Settings -> Integrations -> API. Generate a new API key and copy it here.',
     scopes: ['contacts:read/write', 'emailer_campaigns:read/write', 'organizations:read'],
     docsLabel: 'Apollo.io API docs',
     authType: 'api_key',
@@ -41,7 +42,7 @@ const CONFIGS: Partial<Record<Provider, ConnectConfig>> = {
   klaviyo: {
     label: 'Private API Key',
     placeholder: 'pk_live_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx',
-    instructions: 'In Klaviyo, go to Account → Settings → API Keys. Create a Private API Key with the required permissions.',
+    instructions: 'In Klaviyo, go to Account -> Settings -> API Keys. Create a Private API Key with the required permissions.',
     scopes: ['lists:read', 'profiles:read', 'campaigns:read/write'],
     docsLabel: 'Klaviyo API credentials docs',
     authType: 'api_key',
@@ -126,7 +127,7 @@ export default function ConnectModal({ provider, name, logo, logoColor, mode, on
                       transition: 'all 0.25s',
                     }}>
                       {done
-                        ? <span style={{ color: '#fff', fontSize: 13 }}>✓</span>
+                        ? <Icon name="check" size={13} style={{ color: '#fff' }} />
                         : <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 10, color: active ? '#fff' : 'var(--ink-l)' }}>{idx}</span>
                       }
                     </div>
@@ -160,8 +161,9 @@ export default function ConnectModal({ provider, name, logo, logoColor, mode, on
           {step === 1 && (
             <div>
               {mode === 'reconnect' && (
-                <div style={{ padding: '10px 14px', borderRadius: 10, background: '#fdecea', border: '1px solid rgba(192,57,43,0.25)', marginBottom: 16, fontSize: 12, color: '#c0392b' }}>
-                  ⚠ Authentication expired — syncing is paused. Reconnect to resume.
+                <div style={{ padding: '10px 14px', borderRadius: 10, background: '#fdecea', border: '1px solid rgba(192,57,43,0.25)', marginBottom: 16, fontSize: 12, color: '#c0392b', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <Icon name="warning" size={13} style={{ color: '#c0392b', flexShrink: 0 }} />
+                  Authentication expired — syncing is paused. Reconnect to resume.
                 </div>
               )}
 
@@ -174,7 +176,7 @@ export default function ConnectModal({ provider, name, logo, logoColor, mode, on
                     <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 9, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--ink-l)', marginBottom: 8 }}>Permissions requested</div>
                     {['Read and write CRM records', 'Access contact and account data', 'Sync activity timeline'].map(p => (
                       <div key={p} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4, fontSize: 12, color: 'var(--ink-m)' }}>
-                        <span style={{ color: '#2a7d4f' }}>✓</span> {p}
+                        <Icon name="check" size={11} style={{ color: '#2a7d4f', flexShrink: 0 }} /> {p}
                       </div>
                     ))}
                   </div>
@@ -186,7 +188,7 @@ export default function ConnectModal({ provider, name, logo, logoColor, mode, on
                     <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 9, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--ink-l)', marginBottom: 8 }}>Required scopes</div>
                     {cfg.scopes.map(s => (
                       <div key={s} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4, fontSize: 12, color: 'var(--ink-m)' }}>
-                        <span style={{ color: '#2a7d4f' }}>✓</span>
+                        <Icon name="check" size={11} style={{ color: '#2a7d4f', flexShrink: 0 }} />
                         <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 11 }}>{s}</span>
                       </div>
                     ))}
@@ -209,7 +211,9 @@ export default function ConnectModal({ provider, name, logo, logoColor, mode, on
                     style={{ width: '100%', padding: '14px', fontSize: 14 }}
                     onClick={() => { setTestResult({ ok: true }); setStep(3) }}
                   >
-                    Connect with {name} →
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                      Connect with {name} <Icon name="arrowRight" size={12} />
+                    </span>
                   </button>
                   <div style={{ textAlign: 'center', margin: '12px 0', color: 'var(--ink-l)', fontSize: 12 }}>or</div>
                   <div className="form-group">
@@ -236,13 +240,13 @@ export default function ConnectModal({ provider, name, logo, logoColor, mode, on
                       autoFocus
                     />
                     {testResult && !testResult.ok && (
-                      <div style={{ fontSize: 11, color: '#c0392b', marginTop: 6, lineHeight: 1.4 }}>
-                        ✗ {testResult.error}
+                      <div style={{ fontSize: 11, color: '#c0392b', marginTop: 6, lineHeight: 1.4, display: 'flex', alignItems: 'center', gap: 5 }}>
+                        <Icon name="error" size={11} style={{ color: '#c0392b', flexShrink: 0 }} /> {testResult.error}
                       </div>
                     )}
                     {testResult && testResult.ok && (
-                      <div style={{ fontSize: 11, color: '#2a7d4f', marginTop: 6 }}>
-                        ✓ Connection verified
+                      <div style={{ fontSize: 11, color: '#2a7d4f', marginTop: 6, display: 'flex', alignItems: 'center', gap: 5 }}>
+                        <Icon name="check" size={11} style={{ color: '#2a7d4f', flexShrink: 0 }} /> Connection verified
                         {testResult.data?.total !== undefined && ` — ${testResult.data.total.toLocaleString()} records found`}
                         {testResult.data?.team && ` — workspace: ${testResult.data.team}`}
                       </div>
@@ -270,7 +274,9 @@ export default function ConnectModal({ provider, name, logo, logoColor, mode, on
           {step === 3 && (
             <div>
               <div style={{ padding: '20px', borderRadius: 12, background: '#eaf5ee', border: '1px solid rgba(42,125,79,0.25)', textAlign: 'center', marginBottom: 20 }}>
-                <div style={{ fontSize: 28, marginBottom: 8 }}>✓</div>
+                <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 8, color: '#2a7d4f' }}>
+                  <Icon name="checkCircle" size={28} />
+                </div>
                 <div style={{ fontSize: 14, fontWeight: 600, color: '#2a7d4f', marginBottom: 4 }}>Connection verified</div>
                 <div style={{ fontSize: 12, color: '#2a7d4f' }}>
                   {testResult?.data?.total !== undefined && `${testResult.data.total.toLocaleString()} records ready to sync`}
@@ -290,7 +296,7 @@ export default function ConnectModal({ provider, name, logo, logoColor, mode, on
           <button className="btn-sm btn-sm-ghost" onClick={onClose}>Cancel</button>
           <div style={{ display: 'flex', gap: 8 }}>
             {step > 1 && (
-              <button className="btn-sm btn-sm-ghost" onClick={() => setStep(s => (s - 1) as Step)}>← Back</button>
+              <button className="btn-sm btn-sm-ghost" onClick={() => setStep(s => (s - 1) as Step)}>Back</button>
             )}
             {step < 3 && (
               <button
@@ -304,7 +310,11 @@ export default function ConnectModal({ provider, name, logo, logoColor, mode, on
                 }}
                 disabled={step === 2 && !isOAuth && !apiKey.trim()}
               >
-                {step === 2 && !isOAuth && !testResult?.ok ? 'Test & Continue' : 'Continue →'}
+                {step === 2 && !isOAuth && !testResult?.ok ? 'Test & Continue' : (
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                    Continue <Icon name="arrowRight" size={11} />
+                  </span>
+                )}
               </button>
             )}
             {step === 3 && (

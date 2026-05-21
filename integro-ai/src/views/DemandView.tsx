@@ -2,6 +2,7 @@ import { useState } from 'react'
 import StatCard from '../components/ui/StatCard'
 import AgentPill from '../components/ui/AgentPill'
 import EmptyState from '../components/ui/EmptyState'
+import { Icon } from '../components/ui/Icon'
 import type { SharedViewProps } from '../types'
 
 interface MQL { id: string; name: string; source: string; score: number }
@@ -22,7 +23,7 @@ export default function DemandView({ active, agentStates, toggleAgent, addToast 
           <div className="agent-view-sub">Content signals · Paid performance · MQL routing · Attribution</div>
         </div>
         <div className="agent-controls">
-          <button className="control-btn" onClick={() => { toggleAgent('demand'); addToast(isRunning ? 'Agent paused' : 'Agent resumed ✓') }}>{isRunning ? 'Pause Agent' : 'Resume Agent'}</button>
+          <button className="control-btn" onClick={() => { toggleAgent('demand'); addToast(isRunning ? 'Agent paused' : 'Agent resumed') }}>{isRunning ? 'Pause Agent' : 'Resume Agent'}</button>
           <button className="control-btn">Settings</button>
           <button className="btn-sm btn-sm-primary" onClick={() => addToast('Campaign builder — coming soon')}>+ New Campaign</button>
         </div>
@@ -41,7 +42,7 @@ export default function DemandView({ active, agentStates, toggleAgent, addToast 
         <div className="card">
           <div className="card-header"><div className="card-title">Top Content by MQL Attribution</div></div>
           <EmptyState
-            icon="📝"
+            icon="mail"
             title="No content data yet"
             desc="Connect your marketing platform to track content attribution and MQL sources."
           />
@@ -52,7 +53,9 @@ export default function DemandView({ active, agentStates, toggleAgent, addToast 
           </div>
           {mqls.length === 0 ? (
             <div style={{ textAlign:'center', padding:'28px 0', color:'var(--ink-l)' }}>
-              <div style={{ fontFamily:"'Bebas Neue',sans-serif", fontSize:32, color:'#3ecf8e', marginBottom:4 }}>✓</div>
+              <div style={{ display:'flex', justifyContent:'center', marginBottom:4, color:'#3ecf8e' }}>
+                <Icon name="checkCircle" size={32} />
+              </div>
               <div style={{ fontSize:13 }}>Queue empty</div>
             </div>
           ) : null}
@@ -62,7 +65,7 @@ export default function DemandView({ active, agentStates, toggleAgent, addToast 
       <div className="card">
         <div className="card-header"><div className="card-title">Channel Performance</div></div>
         <EmptyState
-          icon="📣"
+          icon="demandGen"
           title="No channel data yet"
           desc="Connect your ad platforms and analytics tools to see channel performance."
         />

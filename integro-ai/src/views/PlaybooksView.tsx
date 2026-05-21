@@ -11,7 +11,7 @@ export default function PlaybooksView({ active, addToast }: { active: boolean; a
       </div>
       <div className="card">
         <EmptyState
-          icon="📋"
+          icon="playbook"
           title="No playbooks yet"
           desc="Your playbook library is empty. Create your first playbook or connect your CRM so the Growth Playbooks agent can generate them automatically."
           action={{ label: '+ New Playbook', onClick: () => addToast('Playbook builder — coming soon') }}

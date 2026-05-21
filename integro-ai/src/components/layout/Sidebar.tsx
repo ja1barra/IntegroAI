@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import type { AgentId, AgentStates, User } from '../../types'
 import UserMenu from './UserMenu'
+import { Icon } from '../ui/Icon'
+import type { IconName } from '../ui/Icon'
 
 interface Props {
   view: string
@@ -10,23 +12,23 @@ interface Props {
   onLogout: () => void
 }
 
-type NavItem = { id: string; icon: string; label: string; agent?: boolean; color?: string }
+type NavItem = { id: string; icon: IconName; label: string; agent?: boolean; color?: string }
 
 const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
   { label: 'Overview', items: [
-    { id: 'dashboard',      icon: '⊞', label: 'Dashboard' },
-    { id: 'playbooks',      icon: '📋', label: 'Playbooks' },
-    { id: 'reports',        icon: '📊', label: 'Reports' },
+    { id: 'dashboard',      icon: 'dashboard',       label: 'Dashboard' },
+    { id: 'playbooks',      icon: 'playbook',        label: 'Playbooks' },
+    { id: 'reports',        icon: 'reports',         label: 'Reports' },
   ]},
   { label: 'Agents', items: [
-    { id: 'outbound',       icon: '⚡', label: 'Outbound Sales',   agent: true, color: '#3ecf8e' },
-    { id: 'demand',         icon: '📣', label: 'Demand Gen',       agent: true, color: '#f5a623' },
-    { id: 'success',        icon: '💎', label: 'Customer Success', agent: true, color: '#4d9de0' },
-    { id: 'playbook-agent', icon: '🧠', label: 'Growth Playbooks', agent: true, color: '#9b59b6' },
+    { id: 'outbound',       icon: 'outbound',        label: 'Outbound Sales',   agent: true, color: '#3ecf8e' },
+    { id: 'demand',         icon: 'demandGen',       label: 'Demand Gen',       agent: true, color: '#f5a623' },
+    { id: 'success',        icon: 'customerSuccess', label: 'Customer Success', agent: true, color: '#4d9de0' },
+    { id: 'playbook-agent', icon: 'agents',          label: 'Growth Playbooks', agent: true, color: '#9b59b6' },
   ]},
   { label: 'Settings', items: [
-    { id: 'integrations', icon: '🔌', label: 'Integrations' },
-    { id: 'team',         icon: '👥', label: 'Team' },
+    { id: 'integrations', icon: 'integrations', label: 'Integrations' },
+    { id: 'team',         icon: 'team',         label: 'Team' },
   ]},
 ]
 
@@ -44,7 +46,7 @@ export default function Sidebar({ view, setView, agentStates, user, onLogout }: 
               className={`sidebar-nav-item ${view === item.id ? 'active' : ''}`}
               onClick={() => setView(item.id)}
             >
-              <span className="nav-icon">{item.icon}</span>
+              <span className="nav-icon"><Icon name={item.icon} size={15} /></span>
               {item.label}
               {item.agent && (
                 <div className="sidebar-agent-dot" style={{
@@ -78,7 +80,11 @@ export default function Sidebar({ view, setView, agentStates, user, onLogout }: 
           </div>
           <span className="sidebar-user-chevron" style={{
             transform: menuOpen ? 'rotate(180deg)' : 'rotate(0deg)',
-          }}>‹</span>
+            display: 'inline-flex',
+            alignItems: 'center',
+          }}>
+            <Icon name="chevronDown" size={11} />
+          </span>
         </div>
       </div>
     </aside>
