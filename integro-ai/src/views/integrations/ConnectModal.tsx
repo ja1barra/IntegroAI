@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { testConnection as testHubspot } from '../../lib/integrations/hubspot'
 import { testConnection as testApollo } from '../../lib/integrations/apollo'
 import { testConnection as testSlack } from '../../lib/integrations/slack'
+import { testConnection as testKlaviyo } from '../../lib/integrations/klaviyo'
 import { Icon } from '../../components/ui/Icon'
 import type { Provider, TestResult } from '../../lib/integrations/types'
 
@@ -18,7 +19,7 @@ const CONFIGS: Partial<Record<Provider, ConnectConfig>> = {
   hubspot: {
     label: 'Private App Token',
     placeholder: 'pat-na1-xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx',
-    instructions: 'In HubSpot, go to Settings -> Integrations -> Private Apps. Create a new private app, grant the required scopes, and copy the access token.',
+    instructions: 'In HubSpot, go to Settings → Integrations → Private Apps. Create a new private app, grant the required scopes, and copy the access token.',
     scopes: ['crm.objects.contacts.read/write', 'crm.objects.deals.read/write', 'timeline'],
     docsLabel: 'HubSpot Private Apps docs',
     authType: 'private_app_token',
@@ -26,7 +27,7 @@ const CONFIGS: Partial<Record<Provider, ConnectConfig>> = {
   apollo: {
     label: 'API Key',
     placeholder: 'ap_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx',
-    instructions: 'In Apollo.io, go to Settings -> Integrations -> API. Generate a new API key and copy it here.',
+    instructions: 'In Apollo.io, go to Settings → Integrations → API. Generate a new API key and copy it here.',
     scopes: ['contacts:read/write', 'emailer_campaigns:read/write', 'organizations:read'],
     docsLabel: 'Apollo.io API docs',
     authType: 'api_key',
@@ -41,8 +42,8 @@ const CONFIGS: Partial<Record<Provider, ConnectConfig>> = {
   },
   klaviyo: {
     label: 'Private API Key',
-    placeholder: 'pk_live_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx',
-    instructions: 'In Klaviyo, go to Account -> Settings -> API Keys. Create a Private API Key with the required permissions.',
+    placeholder: 'pk_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx',
+    instructions: 'In Klaviyo, go to Account → Settings → API Keys. Create a Private API Key with the required permissions.',
     scopes: ['lists:read', 'profiles:read', 'campaigns:read/write'],
     docsLabel: 'Klaviyo API credentials docs',
     authType: 'api_key',
@@ -58,7 +59,7 @@ interface Props {
   logoColor: string
   mode: 'connect' | 'reconnect'
   onClose: () => void
-  onSuccess: (key: string) => void
+  onSuccess: (key: string, testResult?: TestResult) => void
 }
 
 type Step = 1 | 2 | 3
@@ -67,6 +68,7 @@ async function runTest(provider: Provider, key: string): Promise<TestResult> {
   if (provider === 'hubspot') return testHubspot(key)
   if (provider === 'apollo') return testApollo(key)
   if (provider === 'slack') return testSlack(key)
+  if (provider === 'klaviyo') return testKlaviyo(key)
   await new Promise(r => setTimeout(r, 800))
   return { ok: true }
 }
@@ -91,7 +93,7 @@ export default function ConnectModal({ provider, name, logo, logoColor, mode, on
   }
 
   const handleConnect = () => {
-    onSuccess(apiKey.trim())
+    onSuccess(apiKey.trim(), testResult ?? undefined)
     onClose()
   }
 
@@ -249,6 +251,7 @@ export default function ConnectModal({ provider, name, logo, logoColor, mode, on
                         <Icon name="check" size={11} style={{ color: '#2a7d4f', flexShrink: 0 }} /> Connection verified
                         {testResult.data?.total !== undefined && ` — ${testResult.data.total.toLocaleString()} records found`}
                         {testResult.data?.team && ` — workspace: ${testResult.data.team}`}
+                        {testResult.data?.credits_limit !== undefined && ` — ${testResult.data.credits_used?.toLocaleString() ?? 0} / ${testResult.data.credits_limit.toLocaleString()} credits`}
                       </div>
                     )}
                   </div>
@@ -281,7 +284,8 @@ export default function ConnectModal({ provider, name, logo, logoColor, mode, on
                 <div style={{ fontSize: 12, color: '#2a7d4f' }}>
                   {testResult?.data?.total !== undefined && `${testResult.data.total.toLocaleString()} records ready to sync`}
                   {testResult?.data?.team && `Connected to workspace: ${testResult.data.team}`}
-                  {!testResult?.data?.total && !testResult?.data?.team && 'Ready to sync data'}
+                  {testResult?.data?.credits_limit !== undefined && `${testResult.data.credits_used?.toLocaleString() ?? 0} / ${testResult.data.credits_limit.toLocaleString()} credits`}
+                  {!testResult?.data?.total && !testResult?.data?.team && !testResult?.data?.credits_limit && 'Ready to sync data'}
                 </div>
               </div>
               <div style={{ fontSize: 12, color: 'var(--ink-l)', lineHeight: 1.5, marginBottom: 4 }}>

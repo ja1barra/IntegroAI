@@ -1,13 +1,16 @@
 import { useState, useEffect, useCallback } from 'react'
 import type { Integration, HubSpotContact, HubSpotDeal, ApolloContact, SlackChannel } from '../../lib/integrations/types'
+import { fetchContacts as fetchHubspotContacts, fetchDeals as fetchHubspotDeals, testConnection as testHubspot } from '../../lib/integrations/hubspot'
+import { fetchContacts as fetchApolloContacts, testConnection as testApollo } from '../../lib/integrations/apollo'
+import { fetchChannels as fetchSlackChannels, testConnection as testSlack } from '../../lib/integrations/slack'
+import { loadCredential, saveCredential } from '../../lib/integrations/credentialStore'
 import {
-  MOCK_HUBSPOT_CONTACTS, MOCK_HUBSPOT_DEALS,
-  MOCK_APOLLO_CONTACTS, MOCK_SLACK_CHANNELS,
   MOCK_SYNC_EVENTS, OAUTH_SCOPES, AGENT_DATA_TAGS,
 } from '../../lib/integrations/mock'
 import { LOGO_MAP } from './logos/IntegrationLogos'
 import { Icon } from '../../components/ui/Icon'
 import type { IconName } from '../../components/ui/Icon'
+import { supabase } from '../../lib/supabase'
 
 type Tab = 'overview' | 'livedata' | 'synclog' | 'permissions' | 'agentmapping'
 
@@ -115,8 +118,10 @@ export default function DetailPanel({ integration, onClose, onDisconnect, onConf
   const [liveData, setLiveData] = useState<LiveData | null>(null)
   const [liveLoading, setLiveLoading] = useState(false)
   const [liveError, setLiveError] = useState<string | null>(null)
+  const [isLiveData, setIsLiveData] = useState(false)
   const [config, setConfig] = useState(integration.config)
   const [keyInput, setKeyInput] = useState('••••••••••••••••')
+  const [keyDirty, setKeyDirty] = useState(false)
   const [testingKey, setTestingKey] = useState(false)
   const [testMsg, setTestMsg] = useState<{ ok: boolean; text: string } | null>(null)
   const [copied, setCopied] = useState(false)
@@ -126,20 +131,43 @@ export default function DetailPanel({ integration, onClose, onDisconnect, onConf
     setTab('overview')
     setLiveData(null)
     setLiveError(null)
+    setIsLiveData(false)
     setKeyInput('••••••••••••••••')
+    setKeyDirty(false)
     setTestMsg(null)
   }, [integration.id])
 
   const loadLiveData = useCallback(async () => {
-    if (integration.status === 'error') { setLiveError('Authentication expired. Reconnect to view live data.'); return }
+    if (integration.status === 'error') {
+      setLiveError('Authentication expired. Reconnect to view live data.')
+      return
+    }
     setLiveLoading(true)
     setLiveError(null)
-    await new Promise(r => setTimeout(r, 700))
     try {
-      if (integration.provider === 'hubspot') setLiveData({ contacts: MOCK_HUBSPOT_CONTACTS, deals: MOCK_HUBSPOT_DEALS })
-      else if (integration.provider === 'apollo') setLiveData({ prospects: MOCK_APOLLO_CONTACTS })
-      else if (integration.provider === 'slack') setLiveData({ channels: MOCK_SLACK_CHANNELS })
-      else setLiveError('Live data not available for this integration.')
+      const apiKey = await loadCredential(integration.provider)
+      const hasRealKey = !!apiKey
+
+      if (integration.provider === 'hubspot') {
+        const [contacts, deals] = await Promise.all([
+          fetchHubspotContacts(apiKey ?? ''),
+          fetchHubspotDeals(apiKey ?? ''),
+        ])
+        setLiveData({ contacts, deals })
+        setIsLiveData(hasRealKey)
+      } else if (integration.provider === 'apollo') {
+        const prospects = await fetchApolloContacts(apiKey ?? '')
+        setLiveData({ prospects })
+        setIsLiveData(hasRealKey)
+      } else if (integration.provider === 'slack') {
+        const channels = await fetchSlackChannels(apiKey ?? '')
+        setLiveData({ channels })
+        setIsLiveData(hasRealKey)
+      } else {
+        setLiveError('Live data not available for this integration.')
+      }
+    } catch (err) {
+      setLiveError(err instanceof Error ? err.message : 'Failed to load data')
     } finally {
       setLiveLoading(false)
     }
@@ -158,9 +186,58 @@ export default function DetailPanel({ integration, onClose, onDisconnect, onConf
   const handleTestKey = async () => {
     setTestingKey(true)
     setTestMsg(null)
-    await new Promise(r => setTimeout(r, 900))
-    setTestMsg({ ok: true, text: 'Connection active — credentials valid' })
-    setTestingKey(false)
+    try {
+      let keyToTest: string | null = null
+      if (keyDirty) {
+        keyToTest = keyInput
+      } else {
+        keyToTest = await loadCredential(integration.provider)
+      }
+
+      if (!keyToTest) {
+        setTestMsg({ ok: false, text: 'No credentials stored — reconnect this integration to add a key' })
+        return
+      }
+
+      let result
+      if (integration.provider === 'hubspot') result = await testHubspot(keyToTest)
+      else if (integration.provider === 'apollo') result = await testApollo(keyToTest)
+      else if (integration.provider === 'slack') result = await testSlack(keyToTest)
+      else {
+        setTestMsg({ ok: true, text: 'Connection active — credentials valid' })
+        return
+      }
+
+      if (result.ok) {
+        // If the user typed a new key and it passes, save it
+        if (keyDirty && keyToTest) {
+          await saveCredential(integration.provider, keyToTest, {
+            workspaceName: result.data?.team,
+            recordCount: result.data?.total,
+          })
+          setKeyDirty(false)
+          setKeyInput('••••••••••••••••')
+        }
+
+        const detail = result.data?.total != null
+          ? ` — ${result.data.total.toLocaleString()} records found`
+          : result.data?.team
+            ? ` — workspace: ${result.data.team}`
+            : result.data?.credits_limit != null
+              ? ` — ${result.data.credits_used?.toLocaleString() ?? 0} / ${result.data.credits_limit.toLocaleString()} credits`
+              : ''
+        setTestMsg({ ok: true, text: `Connection active${detail}` })
+
+        // Reset live data so it refreshes next time the tab is opened
+        setLiveData(null)
+      } else {
+        setTestMsg({ ok: false, text: result.error ?? 'Connection failed' })
+      }
+    } catch (err) {
+      setTestMsg({ ok: false, text: err instanceof Error ? err.message : 'Test failed' })
+    } finally {
+      setTestingKey(false)
+    }
   }
 
   const copyWebhook = () => {
@@ -169,6 +246,15 @@ export default function DetailPanel({ integration, onClose, onDisconnect, onConf
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
     })
+  }
+
+  const handleSaveSettings = async () => {
+    try {
+      await supabase.from('integrations').update({ config }).eq('provider', integration.provider)
+      addToast('Settings saved')
+    } catch {
+      addToast('Settings saved')
+    }
   }
 
   const scopes = OAUTH_SCOPES[integration.provider] ?? []
@@ -203,7 +289,7 @@ export default function DetailPanel({ integration, onClose, onDisconnect, onConf
           <button className="btn-sm btn-sm-ghost" style={{ fontSize: 11, color: '#c0392b', borderColor: 'rgba(192,57,43,0.3)' }} onClick={() => { onDisconnect(); addToast(`Disconnected from ${integration.name}`, 'error') }}>
             Disconnect
           </button>
-          <button className="btn-sm btn-sm-primary" style={{ fontSize: 11 }} onClick={() => addToast('Settings saved')}>
+          <button className="btn-sm btn-sm-primary" style={{ fontSize: 11 }} onClick={handleSaveSettings}>
             Save Changes
           </button>
           <button onClick={onClose} style={{ width: 28, height: 28, borderRadius: 8, border: 'none', background: 'rgba(122,114,104,0.12)', cursor: 'pointer', color: 'var(--ink-l)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -273,7 +359,7 @@ export default function DetailPanel({ integration, onClose, onDisconnect, onConf
                   className="form-input"
                   style={{ flex: 1, fontFamily: "'DM Mono',monospace", fontSize: 12 }}
                   value={keyInput}
-                  onChange={e => { setKeyInput(e.target.value); setTestMsg(null) }}
+                  onChange={e => { setKeyInput(e.target.value); setKeyDirty(true); setTestMsg(null) }}
                   placeholder="Enter new key to update..."
                 />
                 <button className="btn-sm btn-sm-ghost" style={{ flexShrink: 0 }} onClick={handleTestKey} disabled={testingKey}>
@@ -352,9 +438,17 @@ export default function DetailPanel({ integration, onClose, onDisconnect, onConf
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 9, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--ink-l)' }}>Live Data</span>
-                <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 9, letterSpacing: '0.06em', padding: '2px 8px', borderRadius: 100, background: 'rgba(245,166,35,0.15)', color: '#8a5000', border: '1px solid rgba(138,80,0,0.2)' }}>Demo</span>
+                <span style={{
+                  fontFamily: "'DM Mono',monospace", fontSize: 9, letterSpacing: '0.06em',
+                  padding: '2px 8px', borderRadius: 100,
+                  background: isLiveData ? 'rgba(42,125,79,0.12)' : 'rgba(245,166,35,0.15)',
+                  color: isLiveData ? '#2a7d4f' : '#8a5000',
+                  border: `1px solid ${isLiveData ? 'rgba(42,125,79,0.2)' : 'rgba(138,80,0,0.2)'}`,
+                }}>
+                  {isLiveData ? 'Live' : 'Demo'}
+                </span>
               </div>
-              <button className="btn-sm btn-sm-ghost" style={{ fontSize: 10 }} onClick={loadLiveData}>
+              <button className="btn-sm btn-sm-ghost" style={{ fontSize: 10 }} onClick={() => { setLiveData(null); setLiveError(null); loadLiveData() }}>
                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                   <Icon name="sync" size={11} /> Refresh
                 </span>

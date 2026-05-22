@@ -1,11 +1,15 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
+import { saveCredential, loadCredential, updateSyncMeta, markError } from '../lib/integrations/credentialStore'
+import { testConnection as testHubspot, fetchContacts as fetchHubspotContacts } from '../lib/integrations/hubspot'
+import { testConnection as testApollo, fetchContacts as fetchApolloContacts } from '../lib/integrations/apollo'
+import { testConnection as testSlack, fetchChannels as fetchSlackChannels } from '../lib/integrations/slack'
 import IntegrationCard from './integrations/IntegrationCard'
 import DetailPanel from './integrations/DetailPanel'
 import ConnectModal from './integrations/ConnectModal'
 import { RequestIcon } from './integrations/logos/IntegrationLogos'
 import { Icon } from '../components/ui/Icon'
-import type { Integration, Provider } from '../lib/integrations/types'
+import type { Integration, Provider, TestResult } from '../lib/integrations/types'
 
 const DEFAULT_CONFIG: Integration['config'] = {
   outbound: true, demandGen: true, customerSuccess: true, revenueIntelligence: false,
@@ -62,6 +66,47 @@ function formatSyncTime(): string {
   return new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
 }
 
+async function syncOneIntegration(provider: string): Promise<{ recordCount?: number; workspaceName?: string }> {
+  const apiKey = await loadCredential(provider)
+  if (!apiKey) return {}
+
+  if (provider === 'hubspot') {
+    const result: TestResult = await testHubspot(apiKey)
+    if (!result.ok) throw new Error(result.error ?? 'HubSpot sync failed')
+    try {
+      const contacts = await fetchHubspotContacts(apiKey)
+      await updateSyncMeta('hubspot', { recordCount: result.data?.total ?? contacts.length })
+      return { recordCount: result.data?.total ?? contacts.length }
+    } catch {
+      await updateSyncMeta('hubspot', { recordCount: result.data?.total })
+      return { recordCount: result.data?.total }
+    }
+  }
+
+  if (provider === 'apollo') {
+    const result: TestResult = await testApollo(apiKey)
+    if (!result.ok) throw new Error(result.error ?? 'Apollo sync failed')
+    try {
+      const contacts = await fetchApolloContacts(apiKey)
+      await updateSyncMeta('apollo', { recordCount: contacts.length })
+      return { recordCount: contacts.length }
+    } catch {
+      await updateSyncMeta('apollo', {})
+      return {}
+    }
+  }
+
+  if (provider === 'slack') {
+    const result: TestResult = await testSlack(apiKey)
+    if (!result.ok) throw new Error(result.error ?? 'Slack sync failed')
+    const channels = await fetchSlackChannels(apiKey)
+    await updateSyncMeta('slack', { recordCount: channels.length, workspaceName: result.data?.team })
+    return { recordCount: channels.length, workspaceName: result.data?.team }
+  }
+
+  return {}
+}
+
 export default function IntegrationsView({ active, addToast }: { active: boolean; addToast: (m: string, t?: 'success' | 'error') => void }) {
   const [integrations, setIntegrations] = useState<Integration[]>(ACTIVE_INTEGRATIONS)
   const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -108,14 +153,39 @@ export default function IntegrationsView({ active, addToast }: { active: boolean
 
   const handleSyncAll = async () => {
     setSyncing(true)
-    await new Promise(r => setTimeout(r, 2000))
+    const connected = integrations.filter(i => i.status === 'connected')
+
+    const results = await Promise.allSettled(
+      connected.map(int => syncOneIntegration(int.provider))
+    )
+
     const now = formatSyncTime()
     setLastSyncTime(now)
-    setIntegrations(prev => prev.map(i =>
-      i.status === 'connected' ? { ...i, lastSync: 'just now' } : i
-    ))
+
+    setIntegrations(prev => prev.map(int => {
+      if (int.status !== 'connected') return int
+      const idx = connected.findIndex(c => c.id === int.id)
+      const result = results[idx]
+      if (!result) return { ...int, lastSync: 'just now' }
+      if (result.status === 'fulfilled') {
+        return {
+          ...int,
+          lastSync: 'just now',
+          ...(result.value.recordCount !== undefined && { recordCount: result.value.recordCount }),
+          ...(result.value.workspaceName && { workspaceName: result.value.workspaceName }),
+        }
+      }
+      return { ...int, lastSync: 'just now' }
+    }))
+
+    const failed = results.filter(r => r.status === 'rejected').length
     setSyncing(false)
-    addToast(`All integrations synced at ${now}`)
+
+    if (failed > 0) {
+      addToast(`Synced ${connected.length - failed} integrations, ${failed} had errors`, 'error')
+    } else {
+      addToast(`All ${connected.length} integrations synced at ${now}`)
+    }
   }
 
   const handleConnectClick = (int: Integration) => {
@@ -123,32 +193,37 @@ export default function IntegrationsView({ active, addToast }: { active: boolean
     setShowModal(true)
   }
 
-  const handleConnectSuccess = async (int: Integration, _key: string) => {
+  const handleConnectSuccess = async (int: Integration, key: string, testResult?: TestResult) => {
+    // Save credential to Supabase
+    if (key) {
+      try {
+        await saveCredential(int.provider, key, {
+          workspaceName: testResult?.data?.team,
+          recordCount: testResult?.data?.total,
+        })
+      } catch (e) {
+        console.error('Failed to save credential:', e)
+      }
+    }
+
+    const workspaceName = testResult?.data?.team ?? int.workspaceName
+    const recordCount = testResult?.data?.total ?? int.recordCount
+
     setIntegrations(prev => prev.map(i =>
-      i.id === int.id ? { ...i, status: 'connected', lastSync: 'just now' } : i
+      i.id === int.id
+        ? { ...i, status: 'connected', lastSync: 'just now', errorMessage: undefined, workspaceName, recordCount }
+        : i
     ))
     addToast(`${int.name} connected`)
-    try {
-      await supabase.from('integrations').upsert({
-        provider: int.provider,
-        connected: true,
-        auth_type: int.authType,
-        config: int.config,
-        last_synced_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      })
-    } catch {
-      // Non-fatal: Supabase table may not exist yet
-    }
   }
 
   const handleDisconnect = async (id: string) => {
     const int = integrations.find(i => i.id === id)
-    setIntegrations(prev => prev.map(i => i.id === id ? { ...i, status: 'configure', lastSync: undefined, recordCount: undefined } : i))
+    setIntegrations(prev => prev.map(i => i.id === id ? { ...i, status: 'configure', lastSync: undefined, recordCount: undefined, errorMessage: undefined } : i))
     setSelectedId(null)
     if (int) {
       try {
-        await supabase.from('integrations').update({ connected: false }).eq('provider', int.provider)
+        await supabase.from('integrations').update({ connected: false, key_encrypted: null }).eq('provider', int.provider)
       } catch {
         // Non-fatal
       }
@@ -299,8 +374,8 @@ export default function IntegrationsView({ active, addToast }: { active: boolean
           logoColor={modalTarget.logoColor}
           mode={modalTarget.status === 'error' ? 'reconnect' : 'connect'}
           onClose={() => { setShowModal(false); setModalTarget(null) }}
-          onSuccess={(key) => {
-            if (modalTarget) handleConnectSuccess(modalTarget, key)
+          onSuccess={(key, testResult) => {
+            if (modalTarget) handleConnectSuccess(modalTarget, key, testResult)
             setShowModal(false)
             setModalTarget(null)
           }}

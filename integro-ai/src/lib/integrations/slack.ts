@@ -3,8 +3,8 @@ import { MOCK_SLACK_CHANNELS } from './mock'
 
 const BASE = 'https://slack.com/api'
 
-function isDemoKey(token: string): boolean {
-  return token.includes('demo') || token.includes('xxxx') || token.startsWith('xoxb-demo')
+export function isDemoKey(token: string): boolean {
+  return !token || token.includes('demo') || token.includes('xxxx') || token.startsWith('xoxb-demo')
 }
 
 export async function fetchChannels(token: string): Promise<SlackChannel[]> {
@@ -16,7 +16,7 @@ export async function fetchChannels(token: string): Promise<SlackChannel[]> {
   if (!res.ok) throw new Error(`Slack API ${res.status}`)
   const data = await res.json() as { ok: boolean; error?: string; channels: SlackChannel[] }
   if (!data.ok) throw new Error(data.error ?? 'Slack API error')
-  return data.channels
+  return data.channels ?? []
 }
 
 export async function testConnection(token: string): Promise<TestResult> {
@@ -35,8 +35,8 @@ export async function testConnection(token: string): Promise<TestResult> {
       return { ok: false, error: data.error ?? 'Slack auth failed' }
     }
     return { ok: true, data: { team: data.team } }
-  } catch {
-    return { ok: false, error: 'Network error reaching Slack API' }
+  } catch (err) {
+    return { ok: false, error: `Connection failed: ${err instanceof Error ? err.message : 'Unknown error'}` }
   }
 }
 
