@@ -5,7 +5,7 @@ import EmptyState from '../components/ui/EmptyState'
 import { Icon } from '../components/ui/Icon'
 import type { SharedViewProps, Approval } from '../types'
 
-export default function Dashboard({ active, onNavigate, agentStates, addToast }: SharedViewProps & { onNavigate: (v: string) => void }) {
+export default function Dashboard({ active, onNavigate, agentStates, addToast, onNewTask }: SharedViewProps & { onNavigate: (v: string) => void; onNewTask: () => void }) {
   const [approvals] = useState<Approval[]>([])
 
   const agentCards = [
@@ -23,7 +23,7 @@ export default function Dashboard({ active, onNavigate, agentStates, addToast }:
         </div>
         <div className="view-actions">
           <button className="btn-sm btn-sm-ghost" onClick={() => addToast('No data to export yet')}>Export Report</button>
-          <button className="btn-sm btn-sm-primary">+ New Task</button>
+          <button className="btn-sm btn-sm-primary" onClick={onNewTask}>+ New Task</button>
         </div>
       </div>
 

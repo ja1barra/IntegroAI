@@ -17,6 +17,7 @@ type NavItem = { id: string; icon: IconName; label: string; agent?: boolean; col
 const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
   { label: 'Overview', items: [
     { id: 'dashboard',      icon: 'dashboard',       label: 'Dashboard' },
+    { id: 'tasks',          icon: 'tasks',           label: 'Tasks' },
     { id: 'playbooks',      icon: 'playbook',        label: 'Playbooks' },
     { id: 'reports',        icon: 'reports',         label: 'Reports' },
   ]},

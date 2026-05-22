@@ -5,7 +5,9 @@ import Sidebar from './components/layout/Sidebar'
 import NotificationPanel from './components/layout/NotificationPanel'
 import TweaksPanel from './components/layout/TweaksPanel'
 import ToastContainer from './components/ui/Toast'
+import TaskCreatorModal from './components/ui/TaskCreatorModal'
 import Dashboard from './views/Dashboard'
+import TasksView from './views/TasksView'
 import OutboundView from './views/OutboundView'
 import DemandView from './views/DemandView'
 import SuccessView from './views/SuccessView'
@@ -16,7 +18,8 @@ import IntegrationsView from './views/IntegrationsView'
 import TeamView from './views/TeamView'
 import ProfileView from './views/ProfileView'
 import AcademyView from './views/AcademyView'
-import type { User, AgentStates, AgentId, Toast, Tweaks } from './types'
+import { useTasks } from './hooks/useTasks'
+import type { User, AgentStates, AgentId, Toast, Tweaks, Task } from './types'
 
 const DEFAULT_AGENT_STATES: AgentStates = { outbound: 'running', demand: 'running', success: 'running', 'playbook-agent': 'running' }
 const DEFAULT_TWEAKS: Tweaks = { darkMode: false, accentColor: 'orange', density: 'default' }
@@ -41,6 +44,15 @@ export default function AppShell({ user, userId, onLogout }: { user: User; userI
   const [tweaks, setTweaksState] = useState<Tweaks>(DEFAULT_TWEAKS)
   const [tweaksOpen, setTweaksOpen] = useState(false)
   const [settingsReady, setSettingsReady] = useState(false)
+
+  const { tasks, addTask, updateTask, deleteTask } = useTasks()
+  const [taskModalOpen, setTaskModalOpen] = useState(false)
+  const [editingTask, setEditingTask] = useState<Task | null>(null)
+
+  const openTaskModal = useCallback((task?: Task) => {
+    setEditingTask(task ?? null)
+    setTaskModalOpen(true)
+  }, [])
 
   const agentStatesRef = useRef(agentStates)
   const tweaksRef = useRef(tweaks)
@@ -134,7 +146,8 @@ export default function AppShell({ user, userId, onLogout }: { user: User; userI
         <Sidebar view={view} setView={(v) => { setView(v); setNotifOpen(false) }} agentStates={agentStates} user={user} onLogout={onLogout} />
 
         <main className="main" onClick={() => setNotifOpen(false)}>
-          <Dashboard         active={view === 'dashboard'}       onNavigate={setView} {...sharedProps} />
+          <Dashboard         active={view === 'dashboard'}       onNavigate={setView} onNewTask={() => openTaskModal()} {...sharedProps} />
+          <TasksView         active={view === 'tasks'}           tasks={tasks} onUpdateTask={updateTask} onDeleteTask={deleteTask} onOpenModal={openTaskModal} />
           <OutboundView      active={view === 'outbound'}         {...sharedProps} />
           <DemandView        active={view === 'demand'}           {...sharedProps} />
           <SuccessView       active={view === 'success'}          {...sharedProps} />
@@ -149,6 +162,21 @@ export default function AppShell({ user, userId, onLogout }: { user: User; userI
       </div>
 
       <ToastContainer toasts={toasts} />
+
+      <TaskCreatorModal
+        isOpen={taskModalOpen}
+        onClose={() => setTaskModalOpen(false)}
+        initial={editingTask}
+        onSubmit={(data) => {
+          if (editingTask) {
+            updateTask(editingTask.id, data)
+            addToast('Task updated')
+          } else {
+            addTask(data)
+            addToast('Task created')
+          }
+        }}
+      />
       {tweaksOpen && (
         <TweaksPanel tweaks={tweaks} setTweak={setTweak} onClose={() => setTweaksOpen(false)} />
       )}

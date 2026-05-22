@@ -51,3 +51,21 @@ export interface SharedViewProps {
   toggleAgent: (id: AgentId) => void
   addToast: (msg: string, type?: 'success' | 'error') => void
 }
+
+// ── Task management ───────────────────────────────────────────
+
+export type TaskStatus   = 'todo' | 'in-progress' | 'review' | 'done' | 'blocked'
+export type TaskPriority = 'low' | 'medium' | 'high' | 'urgent'
+
+export interface Task {
+  id: string
+  title: string
+  description: string
+  status: TaskStatus
+  priority: TaskPriority
+  dueDate: string        // 'YYYY-MM-DD' or ''
+  agent: AgentId | ''
+  tags: string[]
+  createdAt: string
+  updatedAt: string
+}
