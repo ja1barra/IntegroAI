@@ -12,31 +12,37 @@ async function proxyCall(
   apiKey: string,
   options?: { httpMethod?: string; body?: object }
 ): Promise<Response> {
-  return fetch(PROXY, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      endpoint,
-      apiKey,
-      httpMethod: options?.httpMethod ?? 'POST',
-      body: options?.body,
-    }),
+  const httpMethod = options?.httpMethod ?? 'POST'
+  // Try Vercel proxy first (avoids CORS when deployed)
+  try {
+    const r = await fetch(PROXY, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ endpoint, apiKey, httpMethod, body: options?.body }),
+    })
+    if (r.status !== 404) return r
+  } catch {
+    // Proxy not reachable — fall through to direct call
+  }
+  // Direct browser call fallback (Apollo API supports CORS)
+  const base = 'https://api.apollo.io'
+  const url = `${base}${endpoint}`
+  if (httpMethod === 'GET') {
+    return fetch(url, { headers: { 'X-Api-Key': apiKey } })
+  }
+  return fetch(url, {
+    method: httpMethod,
+    headers: { 'Content-Type': 'application/json', 'X-Api-Key': apiKey },
+    ...(options?.body && { body: JSON.stringify(options.body) }),
   })
 }
 
 export async function fetchContacts(apiKey: string): Promise<ApolloContact[]> {
   if (isDemoKey(apiKey)) return MOCK_APOLLO_CONTACTS
-  try {
-    const res = await proxyCall('/v1/contacts/search', apiKey, { body: { per_page: 50 } })
-    if (!res.ok) throw new Error(`Apollo API ${res.status}: ${res.statusText}`)
-    const data = await res.json() as { contacts: ApolloContact[] }
-    return data.contacts ?? []
-  } catch (err) {
-    if (err instanceof Error && err.message.includes('404')) {
-      throw new Error('Apollo proxy not deployed — deploy to Vercel to enable real Apollo data')
-    }
-    throw err
-  }
+  const res = await proxyCall('/v1/contacts/search', apiKey, { body: { per_page: 50 } })
+  if (!res.ok) throw new Error(`Apollo API ${res.status}: ${res.statusText}`)
+  const data = await res.json() as { contacts: ApolloContact[] }
+  return data.contacts ?? []
 }
 
 export async function testConnection(apiKey: string): Promise<TestResult> {
@@ -46,12 +52,6 @@ export async function testConnection(apiKey: string): Promise<TestResult> {
   }
   try {
     const res = await proxyCall('/v1/auth/health', apiKey, { httpMethod: 'GET' })
-    if (res.status === 404) {
-      return {
-        ok: false,
-        error: 'Apollo proxy not deployed — push to Vercel and the /api/integrations/apollo route will be live',
-      }
-    }
     if (res.status === 401) {
       return { ok: false, error: 'Invalid API key — check your Apollo.io account Settings → API Keys' }
     }

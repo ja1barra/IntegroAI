@@ -1,9 +1,15 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
-import { saveCredential, loadCredential, updateSyncMeta, markError } from '../lib/integrations/credentialStore'
+import { saveCredential, loadCredential, updateSyncMeta } from '../lib/integrations/credentialStore'
 import { testConnection as testHubspot, fetchContacts as fetchHubspotContacts } from '../lib/integrations/hubspot'
 import { testConnection as testApollo, fetchContacts as fetchApolloContacts } from '../lib/integrations/apollo'
 import { testConnection as testSlack, fetchChannels as fetchSlackChannels } from '../lib/integrations/slack'
+import { testConnection as testSalesforce } from '../lib/integrations/salesforce'
+import { testConnection as testOutreach } from '../lib/integrations/outreach'
+import { testConnection as testLinkedin } from '../lib/integrations/linkedin'
+import { testConnection as testGong } from '../lib/integrations/gong'
+import { testConnection as testIntercom } from '../lib/integrations/intercom'
+import { testConnection as testGA4 } from '../lib/integrations/ga4'
 import IntegrationCard from './integrations/IntegrationCard'
 import DetailPanel from './integrations/DetailPanel'
 import ConnectModal from './integrations/ConnectModal'
@@ -67,14 +73,14 @@ function formatSyncTime(): string {
 }
 
 async function syncOneIntegration(provider: string): Promise<{ recordCount?: number; workspaceName?: string }> {
-  const apiKey = await loadCredential(provider)
-  if (!apiKey) return {}
+  const credential = await loadCredential(provider)
+  if (!credential) return {}
 
   if (provider === 'hubspot') {
-    const result: TestResult = await testHubspot(apiKey)
+    const result: TestResult = await testHubspot(credential)
     if (!result.ok) throw new Error(result.error ?? 'HubSpot sync failed')
     try {
-      const contacts = await fetchHubspotContacts(apiKey)
+      const contacts = await fetchHubspotContacts(credential)
       await updateSyncMeta('hubspot', { recordCount: result.data?.total ?? contacts.length })
       return { recordCount: result.data?.total ?? contacts.length }
     } catch {
@@ -84,10 +90,10 @@ async function syncOneIntegration(provider: string): Promise<{ recordCount?: num
   }
 
   if (provider === 'apollo') {
-    const result: TestResult = await testApollo(apiKey)
+    const result: TestResult = await testApollo(credential)
     if (!result.ok) throw new Error(result.error ?? 'Apollo sync failed')
     try {
-      const contacts = await fetchApolloContacts(apiKey)
+      const contacts = await fetchApolloContacts(credential)
       await updateSyncMeta('apollo', { recordCount: contacts.length })
       return { recordCount: contacts.length }
     } catch {
@@ -97,18 +103,60 @@ async function syncOneIntegration(provider: string): Promise<{ recordCount?: num
   }
 
   if (provider === 'slack') {
-    const result: TestResult = await testSlack(apiKey)
+    const result: TestResult = await testSlack(credential)
     if (!result.ok) throw new Error(result.error ?? 'Slack sync failed')
-    const channels = await fetchSlackChannels(apiKey)
+    const channels = await fetchSlackChannels(credential)
     await updateSyncMeta('slack', { recordCount: channels.length, workspaceName: result.data?.team })
     return { recordCount: channels.length, workspaceName: result.data?.team }
+  }
+
+  if (provider === 'salesforce') {
+    const result: TestResult = await testSalesforce(credential)
+    if (!result.ok) throw new Error(result.error ?? 'Salesforce sync failed')
+    await updateSyncMeta('salesforce', { recordCount: result.data?.total })
+    return { recordCount: result.data?.total }
+  }
+
+  if (provider === 'outreach') {
+    const result: TestResult = await testOutreach(credential)
+    if (!result.ok) throw new Error(result.error ?? 'Outreach sync failed')
+    await updateSyncMeta('outreach', { recordCount: result.data?.total })
+    return { recordCount: result.data?.total }
+  }
+
+  if (provider === 'linkedin') {
+    const result: TestResult = await testLinkedin(credential)
+    if (!result.ok) throw new Error(result.error ?? 'LinkedIn sync failed')
+    await updateSyncMeta('linkedin', { recordCount: result.data?.total })
+    return { recordCount: result.data?.total }
+  }
+
+  if (provider === 'gong') {
+    const result: TestResult = await testGong(credential)
+    if (!result.ok) throw new Error(result.error ?? 'Gong sync failed')
+    await updateSyncMeta('gong', { recordCount: result.data?.total })
+    return { recordCount: result.data?.total }
+  }
+
+  if (provider === 'intercom') {
+    const result: TestResult = await testIntercom(credential)
+    if (!result.ok) throw new Error(result.error ?? 'Intercom sync failed')
+    await updateSyncMeta('intercom', { recordCount: result.data?.total, workspaceName: result.data?.team })
+    return { recordCount: result.data?.total, workspaceName: result.data?.team }
+  }
+
+  if (provider === 'ga4') {
+    const result: TestResult = await testGA4(credential)
+    if (!result.ok) throw new Error(result.error ?? 'GA4 sync failed')
+    await updateSyncMeta('ga4', { recordCount: result.data?.total })
+    return { recordCount: result.data?.total }
   }
 
   return {}
 }
 
 export default function IntegrationsView({ active, addToast }: { active: boolean; addToast: (m: string, t?: 'success' | 'error') => void }) {
-  const [integrations, setIntegrations] = useState<Integration[]>(ACTIVE_INTEGRATIONS)
+  const [integrations, setIntegrations] = useState<Integration[]>([...ACTIVE_INTEGRATIONS, ...AVAILABLE_INTEGRATIONS])
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [showModal, setShowModal] = useState(false)
   const [modalTarget, setModalTarget] = useState<Integration | null>(null)
@@ -143,6 +191,8 @@ export default function IntegrationsView({ active, addToast }: { active: boolean
     loadFromSupabase()
   }, [loadFromSupabase])
 
+  const activeIntegrations = integrations.filter(i => i.status !== 'available')
+  const availableIntegrations = integrations.filter(i => i.status === 'available')
   const connectedCount = integrations.filter(i => i.status === 'connected').length
   const needsAttention = integrations.filter(i => i.status === 'error').length
   const selectedIntegration = integrations.find(i => i.id === selectedId) ?? null
@@ -153,7 +203,7 @@ export default function IntegrationsView({ active, addToast }: { active: boolean
 
   const handleSyncAll = async () => {
     setSyncing(true)
-    const connected = integrations.filter(i => i.status === 'connected')
+    const connected = activeIntegrations.filter(i => i.status === 'connected')
 
     const results = await Promise.allSettled(
       connected.map(int => syncOneIntegration(int.provider))
@@ -280,7 +330,7 @@ export default function IntegrationsView({ active, addToast }: { active: boolean
         {[
           { label: 'Connected', value: connectedCount, color: '#2a7d4f', bg: '#eaf5ee', border: 'rgba(42,125,79,0.2)' },
           { label: 'Needs Attention', value: needsAttention, color: needsAttention > 0 ? '#c0392b' : 'var(--ink-l)', bg: needsAttention > 0 ? '#fdecea' : 'transparent', border: needsAttention > 0 ? 'rgba(192,57,43,0.2)' : 'transparent' },
-          { label: 'Available', value: AVAILABLE_INTEGRATIONS.length, color: 'var(--ink-l)', bg: 'transparent', border: 'transparent' },
+          { label: 'Available', value: availableIntegrations.length, color: 'var(--ink-l)', bg: 'transparent', border: 'transparent' },
         ].map((stat, i) => (
           <div key={stat.label} style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 10, padding: '0 20px', borderLeft: i > 0 ? '1px solid rgba(255,255,255,0.5)' : 'none' }}>
             <div style={{ width: 32, height: 32, borderRadius: 8, background: stat.bg, border: `1px solid ${stat.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
@@ -303,7 +353,7 @@ export default function IntegrationsView({ active, addToast }: { active: boolean
       <div style={{ marginBottom: 8 }}>
         <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 9, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--ink-l)', marginBottom: 12 }}>Active Integrations</div>
         <div className="grid-2" style={{ marginBottom: selectedIntegration ? 12 : 24 }}>
-          {integrations.map(int => (
+          {activeIntegrations.map(int => (
             <IntegrationCard
               key={int.id}
               {...int}
@@ -340,7 +390,7 @@ export default function IntegrationsView({ active, addToast }: { active: boolean
           </span>
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 10 }}>
-          {AVAILABLE_INTEGRATIONS.map(int => (
+          {availableIntegrations.map(int => (
             <IntegrationCard
               key={int.id}
               {...int}

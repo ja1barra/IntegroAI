@@ -3,6 +3,14 @@ import { testConnection as testHubspot } from '../../lib/integrations/hubspot'
 import { testConnection as testApollo } from '../../lib/integrations/apollo'
 import { testConnection as testSlack } from '../../lib/integrations/slack'
 import { testConnection as testKlaviyo } from '../../lib/integrations/klaviyo'
+import { testConnection as testSalesforce } from '../../lib/integrations/salesforce'
+import { testConnection as testOutreach } from '../../lib/integrations/outreach'
+import { testConnection as testLinkedin } from '../../lib/integrations/linkedin'
+import { testConnection as testGong } from '../../lib/integrations/gong'
+import { testConnection as testIntercom } from '../../lib/integrations/intercom'
+import { testConnection as testZapier } from '../../lib/integrations/zapier'
+import { testConnection as testGA4 } from '../../lib/integrations/ga4'
+import { startOAuthFlow, tokensToKey, isOAuthProvider } from '../../lib/integrations/oauth'
 import { Icon } from '../../components/ui/Icon'
 import type { Provider, TestResult } from '../../lib/integrations/types'
 
@@ -11,8 +19,10 @@ interface ConnectConfig {
   placeholder: string
   instructions: string
   scopes: string[]
+  docsUrl?: string
   docsLabel: string
-  authType: 'api_key' | 'oauth' | 'private_app_token'
+  secondFieldLabel?: string
+  secondFieldPlaceholder?: string
 }
 
 const CONFIGS: Partial<Record<Provider, ConnectConfig>> = {
@@ -22,7 +32,6 @@ const CONFIGS: Partial<Record<Provider, ConnectConfig>> = {
     instructions: 'In HubSpot, go to Settings → Integrations → Private Apps. Create a new private app, grant the required scopes, and copy the access token.',
     scopes: ['crm.objects.contacts.read/write', 'crm.objects.deals.read/write', 'timeline'],
     docsLabel: 'HubSpot Private Apps docs',
-    authType: 'private_app_token',
   },
   apollo: {
     label: 'API Key',
@@ -30,7 +39,6 @@ const CONFIGS: Partial<Record<Provider, ConnectConfig>> = {
     instructions: 'In Apollo.io, go to Settings → Integrations → API. Generate a new API key and copy it here.',
     scopes: ['contacts:read/write', 'emailer_campaigns:read/write', 'organizations:read'],
     docsLabel: 'Apollo.io API docs',
-    authType: 'api_key',
   },
   slack: {
     label: 'Bot Token',
@@ -38,7 +46,6 @@ const CONFIGS: Partial<Record<Provider, ConnectConfig>> = {
     instructions: 'Create a Slack app at api.slack.com/apps, install it to your workspace, and copy the Bot User OAuth Token from the OAuth & Permissions page.',
     scopes: ['channels:read', 'chat:write', 'users:read'],
     docsLabel: 'Slack API authentication docs',
-    authType: 'api_key',
   },
   klaviyo: {
     label: 'Private API Key',
@@ -46,11 +53,32 @@ const CONFIGS: Partial<Record<Provider, ConnectConfig>> = {
     instructions: 'In Klaviyo, go to Account → Settings → API Keys. Create a Private API Key with the required permissions.',
     scopes: ['lists:read', 'profiles:read', 'campaigns:read/write'],
     docsLabel: 'Klaviyo API credentials docs',
-    authType: 'api_key',
+  },
+  gong: {
+    label: 'Access Key',
+    placeholder: 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx',
+    instructions: 'In Gong, go to Settings → Ecosystem → API. Create API credentials. You need both the Access Key and Access Key Secret.',
+    scopes: ['calls:read', 'users:read', 'library:read'],
+    docsLabel: 'Gong API docs',
+    secondFieldLabel: 'Access Key Secret',
+    secondFieldPlaceholder: 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx',
+  },
+  zapier: {
+    label: 'Webhook URL',
+    placeholder: 'https://hooks.zapier.com/hooks/catch/xxxxxxx/xxxxxxx/',
+    instructions: 'In Zapier, create a new Zap with "Webhooks by Zapier" as the trigger. Select "Catch Hook", then copy the webhook URL shown.',
+    scopes: ['POST events from IntegroAI agents'],
+    docsLabel: 'Zapier Webhooks docs',
   },
 }
 
-const OAUTH_PROVIDERS: Provider[] = ['salesforce', 'outreach', 'linkedin', 'gong', 'intercom', 'zapier', 'ga4']
+const OAUTH_PERMISSIONS: Partial<Record<Provider, string[]>> = {
+  salesforce: ['Read and write Contacts and Opportunities', 'Access Account and Lead records', 'Sync activity timeline'],
+  outreach: ['Read and manage Prospects and Sequences', 'Access Account data', 'Manage sequence enrollment'],
+  linkedin: ['Read your profile information', 'Access connection data', 'Post on your behalf (optional)'],
+  intercom: ['Read contact and user data', 'Access conversation history', 'Send messages to users'],
+  ga4: ['Read Google Analytics properties', 'Access traffic and conversion reports', 'View campaign attribution data'],
+}
 
 interface Props {
   provider: Provider
@@ -64,11 +92,19 @@ interface Props {
 
 type Step = 1 | 2 | 3
 
-async function runTest(provider: Provider, key: string): Promise<TestResult> {
-  if (provider === 'hubspot') return testHubspot(key)
-  if (provider === 'apollo') return testApollo(key)
-  if (provider === 'slack') return testSlack(key)
-  if (provider === 'klaviyo') return testKlaviyo(key)
+async function runTest(provider: Provider, key: string, secondKey?: string): Promise<TestResult> {
+  const credential = secondKey ? `${key}:${secondKey}` : key
+  if (provider === 'hubspot') return testHubspot(credential)
+  if (provider === 'apollo') return testApollo(credential)
+  if (provider === 'slack') return testSlack(credential)
+  if (provider === 'klaviyo') return testKlaviyo(credential)
+  if (provider === 'salesforce') return testSalesforce(credential)
+  if (provider === 'outreach') return testOutreach(credential)
+  if (provider === 'linkedin') return testLinkedin(credential)
+  if (provider === 'gong') return testGong(credential)
+  if (provider === 'intercom') return testIntercom(credential)
+  if (provider === 'zapier') return testZapier(credential)
+  if (provider === 'ga4') return testGA4(credential)
   await new Promise(r => setTimeout(r, 800))
   return { ok: true }
 }
@@ -76,24 +112,51 @@ async function runTest(provider: Provider, key: string): Promise<TestResult> {
 export default function ConnectModal({ provider, name, logo, logoColor, mode, onClose, onSuccess }: Props) {
   const [step, setStep] = useState<Step>(1)
   const [apiKey, setApiKey] = useState('')
+  const [secondKey, setSecondKey] = useState('')
   const [testing, setTesting] = useState(false)
   const [testResult, setTestResult] = useState<TestResult | null>(null)
+  const [oauthLoading, setOauthLoading] = useState(false)
+  const [oauthError, setOauthError] = useState<string | null>(null)
 
   const cfg = CONFIGS[provider]
-  const isOAuth = OAUTH_PROVIDERS.includes(provider)
+  const isOAuth = isOAuthProvider(provider)
+  const oauthPerms = OAUTH_PERMISSIONS[provider] ?? ['Read and write CRM records', 'Access contact and account data', 'Sync activity timeline']
 
   const handleTest = async () => {
     if (!apiKey.trim()) return
     setTesting(true)
     setTestResult(null)
-    const result = await runTest(provider, apiKey.trim())
+    const result = await runTest(provider, apiKey.trim(), secondKey.trim() || undefined)
     setTestResult(result)
     setTesting(false)
     if (result.ok) setTimeout(() => setStep(3), 400)
   }
 
+  const handleOAuth = async () => {
+    setOauthLoading(true)
+    setOauthError(null)
+    const result = await startOAuthFlow(provider)
+    setOauthLoading(false)
+    if (result.ok && result.tokens) {
+      const credential = tokensToKey(result.tokens)
+      const testRes = await runTest(provider, credential)
+      setTestResult(testRes)
+      if (testRes.ok) {
+        onSuccess(credential, testRes)
+        onClose()
+      } else {
+        setOauthError(testRes.error ?? 'Connection test failed after OAuth')
+      }
+    } else {
+      setOauthError(result.error ?? 'OAuth authorization failed')
+    }
+  }
+
   const handleConnect = () => {
-    onSuccess(apiKey.trim(), testResult ?? undefined)
+    const credential = cfg?.secondFieldLabel && secondKey.trim()
+      ? `${apiKey.trim()}:${secondKey.trim()}`
+      : apiKey.trim()
+    onSuccess(credential, testResult ?? undefined)
     onClose()
   }
 
@@ -154,7 +217,7 @@ export default function ConnectModal({ provider, name, logo, logoColor, mode, on
             <div>
               <div style={{ fontSize: 16, fontWeight: 600 }}>{mode === 'reconnect' ? `Reconnect ${name}` : `Connect ${name}`}</div>
               <div style={{ fontSize: 12, color: 'var(--ink-l)', marginTop: 2 }}>
-                {mode === 'reconnect' ? 'Your token expired. Enter a new key to restore the connection.' : 'Authorize Integro AI to access your account.'}
+                {mode === 'reconnect' ? 'Your token expired. Reconnect to restore sync.' : 'Authorize Integro AI to access your account.'}
               </div>
             </div>
           </div>
@@ -169,33 +232,24 @@ export default function ConnectModal({ provider, name, logo, logoColor, mode, on
                 </div>
               )}
 
+              <div style={{ padding: '14px 16px', borderRadius: 10, background: 'rgba(255,255,255,0.45)', border: '1px solid rgba(255,255,255,0.6)', marginBottom: 16 }}>
+                <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 9, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--ink-l)', marginBottom: 8 }}>
+                  {isOAuth ? 'Permissions requested' : 'Required scopes'}
+                </div>
+                {(isOAuth ? oauthPerms : cfg?.scopes ?? []).map(p => (
+                  <div key={p} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4, fontSize: 12, color: 'var(--ink-m)' }}>
+                    <Icon name="check" size={11} style={{ color: '#2a7d4f', flexShrink: 0 }} />
+                    {isOAuth ? p : <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 11 }}>{p}</span>}
+                  </div>
+                ))}
+              </div>
+
               {isOAuth ? (
-                <div>
-                  <p style={{ fontSize: 13, color: 'var(--ink-m)', lineHeight: 1.6, marginBottom: 16 }}>
-                    Click <strong>Connect with OAuth</strong> to be redirected to {name} to authorize Integro AI. You'll be returned here automatically after approval.
-                  </p>
-                  <div style={{ padding: '14px 16px', borderRadius: 10, background: 'rgba(255,255,255,0.45)', border: '1px solid rgba(255,255,255,0.6)', marginBottom: 16 }}>
-                    <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 9, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--ink-l)', marginBottom: 8 }}>Permissions requested</div>
-                    {['Read and write CRM records', 'Access contact and account data', 'Sync activity timeline'].map(p => (
-                      <div key={p} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4, fontSize: 12, color: 'var(--ink-m)' }}>
-                        <Icon name="check" size={11} style={{ color: '#2a7d4f', flexShrink: 0 }} /> {p}
-                      </div>
-                    ))}
-                  </div>
-                </div>
+                <p style={{ fontSize: 12, color: 'var(--ink-l)', lineHeight: 1.6, margin: 0 }}>
+                  Clicking <strong>Continue</strong> will open a {name} authorization window. After you approve, you'll be returned here automatically.
+                </p>
               ) : cfg ? (
-                <div>
-                  <p style={{ fontSize: 13, color: 'var(--ink-m)', lineHeight: 1.6, marginBottom: 14 }}>{cfg.instructions}</p>
-                  <div style={{ padding: '14px 16px', borderRadius: 10, background: 'rgba(255,255,255,0.45)', border: '1px solid rgba(255,255,255,0.6)', marginBottom: 0 }}>
-                    <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 9, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--ink-l)', marginBottom: 8 }}>Required scopes</div>
-                    {cfg.scopes.map(s => (
-                      <div key={s} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4, fontSize: 12, color: 'var(--ink-m)' }}>
-                        <Icon name="check" size={11} style={{ color: '#2a7d4f', flexShrink: 0 }} />
-                        <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 11 }}>{s}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
+                <p style={{ fontSize: 13, color: 'var(--ink-m)', lineHeight: 1.6, margin: 0 }}>{cfg.instructions}</p>
               ) : null}
             </div>
           )}
@@ -206,32 +260,47 @@ export default function ConnectModal({ provider, name, logo, logoColor, mode, on
               {isOAuth ? (
                 <div>
                   <p style={{ fontSize: 13, color: 'var(--ink-m)', marginBottom: 20, lineHeight: 1.5 }}>
-                    Click the button below to be redirected to {name} for OAuth authorization.
+                    Click the button below to be redirected to <strong>{name}</strong> for OAuth authorization. A popup window will open — allow it if your browser blocks it.
                   </p>
+
+                  {oauthError && (
+                    <div style={{ padding: '10px 14px', borderRadius: 8, background: '#fdecea', border: '1px solid rgba(192,57,43,0.25)', marginBottom: 16, fontSize: 12, color: '#c0392b', display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+                      <Icon name="error" size={13} style={{ color: '#c0392b', flexShrink: 0, marginTop: 1 }} />
+                      <span>{oauthError}</span>
+                    </div>
+                  )}
+
                   <button
                     className="btn-sm btn-sm-primary"
                     style={{ width: '100%', padding: '14px', fontSize: 14 }}
-                    onClick={() => { setTestResult({ ok: true }); setStep(3) }}
+                    onClick={handleOAuth}
+                    disabled={oauthLoading}
                   >
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                      Connect with {name} <Icon name="arrowRight" size={12} />
-                    </span>
+                    {oauthLoading ? (
+                      <span className="btn-loading"><span />Waiting for authorization...</span>
+                    ) : (
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                        Connect with {name} <Icon name="arrowRight" size={12} />
+                      </span>
+                    )}
                   </button>
-                  <div style={{ textAlign: 'center', margin: '12px 0', color: 'var(--ink-l)', fontSize: 12 }}>or</div>
-                  <div className="form-group">
-                    <label className="form-label">Manual API Key (if available)</label>
+
+                  <div style={{ textAlign: 'center', margin: '16px 0 12px', color: 'var(--ink-l)', fontSize: 11, fontFamily: "'DM Mono',monospace", letterSpacing: '0.05em', textTransform: 'uppercase' }}>or use a manual token</div>
+
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label">Access Token (advanced)</label>
                     <input
                       type="password"
                       className="form-input"
-                      placeholder="Enter API key..."
+                      placeholder="Paste OAuth access token directly..."
                       value={apiKey}
-                      onChange={e => { setApiKey(e.target.value); setTestResult(null) }}
+                      onChange={e => { setApiKey(e.target.value); setTestResult(null); setOauthError(null) }}
                     />
                   </div>
                 </div>
               ) : cfg ? (
                 <div>
-                  <div className="form-group" style={{ marginBottom: 8 }}>
+                  <div className="form-group" style={{ marginBottom: cfg.secondFieldLabel ? 12 : 8 }}>
                     <label className="form-label">{cfg.label}</label>
                     <input
                       type="password"
@@ -241,21 +310,35 @@ export default function ConnectModal({ provider, name, logo, logoColor, mode, on
                       onChange={e => { setApiKey(e.target.value); setTestResult(null) }}
                       autoFocus
                     />
-                    {testResult && !testResult.ok && (
-                      <div style={{ fontSize: 11, color: '#c0392b', marginTop: 6, lineHeight: 1.4, display: 'flex', alignItems: 'center', gap: 5 }}>
-                        <Icon name="error" size={11} style={{ color: '#c0392b', flexShrink: 0 }} /> {testResult.error}
-                      </div>
-                    )}
-                    {testResult && testResult.ok && (
-                      <div style={{ fontSize: 11, color: '#2a7d4f', marginTop: 6, display: 'flex', alignItems: 'center', gap: 5 }}>
-                        <Icon name="check" size={11} style={{ color: '#2a7d4f', flexShrink: 0 }} /> Connection verified
-                        {testResult.data?.total !== undefined && ` — ${testResult.data.total.toLocaleString()} records found`}
-                        {testResult.data?.team && ` — workspace: ${testResult.data.team}`}
-                        {testResult.data?.credits_limit !== undefined && ` — ${testResult.data.credits_used?.toLocaleString() ?? 0} / ${testResult.data.credits_limit.toLocaleString()} credits`}
-                      </div>
-                    )}
                   </div>
-                  <div style={{ fontSize: 11, color: 'var(--ink-l)' }}>
+
+                  {cfg.secondFieldLabel && (
+                    <div className="form-group" style={{ marginBottom: 8 }}>
+                      <label className="form-label">{cfg.secondFieldLabel}</label>
+                      <input
+                        type="password"
+                        className="form-input"
+                        placeholder={cfg.secondFieldPlaceholder}
+                        value={secondKey}
+                        onChange={e => { setSecondKey(e.target.value); setTestResult(null) }}
+                      />
+                    </div>
+                  )}
+
+                  {testResult && !testResult.ok && (
+                    <div style={{ fontSize: 11, color: '#c0392b', marginTop: 6, lineHeight: 1.4, display: 'flex', alignItems: 'center', gap: 5 }}>
+                      <Icon name="error" size={11} style={{ color: '#c0392b', flexShrink: 0 }} /> {testResult.error}
+                    </div>
+                  )}
+                  {testResult && testResult.ok && (
+                    <div style={{ fontSize: 11, color: '#2a7d4f', marginTop: 6, display: 'flex', alignItems: 'center', gap: 5 }}>
+                      <Icon name="check" size={11} style={{ color: '#2a7d4f', flexShrink: 0 }} /> Connection verified
+                      {testResult.data?.total !== undefined && ` — ${testResult.data.total.toLocaleString()} records`}
+                      {testResult.data?.team && ` — workspace: ${testResult.data.team}`}
+                      {testResult.data?.credits_limit !== undefined && ` — ${testResult.data.credits_used?.toLocaleString() ?? 0} / ${testResult.data.credits_limit.toLocaleString()} credits`}
+                    </div>
+                  )}
+                  <div style={{ fontSize: 11, color: 'var(--ink-l)', marginTop: 8 }}>
                     Keys are encrypted before storage and never exposed in the UI after saving.
                   </div>
                   <button
@@ -302,7 +385,7 @@ export default function ConnectModal({ provider, name, logo, logoColor, mode, on
             {step > 1 && (
               <button className="btn-sm btn-sm-ghost" onClick={() => setStep(s => (s - 1) as Step)}>Back</button>
             )}
-            {step < 3 && (
+            {step < 3 && !(step === 2 && isOAuth) && (
               <button
                 className="btn-sm btn-sm-primary"
                 onClick={() => {
@@ -319,6 +402,15 @@ export default function ConnectModal({ provider, name, logo, logoColor, mode, on
                     Continue <Icon name="arrowRight" size={11} />
                   </span>
                 )}
+              </button>
+            )}
+            {step === 2 && isOAuth && apiKey.trim() && !oauthLoading && (
+              <button
+                className="btn-sm btn-sm-ghost"
+                onClick={handleTest}
+                disabled={testing}
+              >
+                {testing ? <span className="btn-loading"><span />Testing...</span> : 'Use Manual Token'}
               </button>
             )}
             {step === 3 && (
