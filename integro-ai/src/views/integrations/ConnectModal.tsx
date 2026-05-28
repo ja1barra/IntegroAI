@@ -19,8 +19,8 @@ interface ConnectConfig {
   placeholder: string
   instructions: string
   scopes: string[]
-  docsUrl?: string
-  docsLabel: string
+  connectUrl: string
+  connectLabel: string
   secondFieldLabel?: string
   secondFieldPlaceholder?: string
 }
@@ -31,44 +31,50 @@ const CONFIGS: Partial<Record<Provider, ConnectConfig>> = {
     placeholder: 'pat-na1-xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx',
     instructions: 'In HubSpot, go to Settings → Integrations → Private Apps. Create a new private app, grant the required scopes, and copy the access token.',
     scopes: ['crm.objects.contacts.read/write', 'crm.objects.deals.read/write', 'timeline'],
-    docsLabel: 'HubSpot Private Apps docs',
+    connectUrl: 'https://app.hubspot.com/private-apps',
+    connectLabel: 'Open HubSpot Private Apps',
   },
   apollo: {
     label: 'API Key',
     placeholder: 'ap_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx',
     instructions: 'In Apollo.io, go to Settings → Integrations → API. Generate a new API key and copy it here.',
     scopes: ['contacts:read/write', 'emailer_campaigns:read/write', 'organizations:read'],
-    docsLabel: 'Apollo.io API docs',
+    connectUrl: 'https://app.apollo.io/#/settings/integrations/api',
+    connectLabel: 'Open Apollo.io API Settings',
   },
   slack: {
     label: 'Bot Token',
     placeholder: 'xoxb-xxxxxxxxxxxx-xxxxxxxxxxxx-xxxxxxxxxxxxxxxxxxxxxxxx',
-    instructions: 'Create a Slack app at api.slack.com/apps, install it to your workspace, and copy the Bot User OAuth Token from the OAuth & Permissions page.',
+    instructions: 'Create a Slack app, install it to your workspace, and copy the Bot User OAuth Token from OAuth & Permissions.',
     scopes: ['channels:read', 'chat:write', 'users:read'],
-    docsLabel: 'Slack API authentication docs',
+    connectUrl: 'https://api.slack.com/apps',
+    connectLabel: 'Open Slack App Dashboard',
   },
   klaviyo: {
     label: 'Private API Key',
     placeholder: 'pk_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx',
     instructions: 'In Klaviyo, go to Account → Settings → API Keys. Create a Private API Key with the required permissions.',
     scopes: ['lists:read', 'profiles:read', 'campaigns:read/write'],
-    docsLabel: 'Klaviyo API credentials docs',
+    connectUrl: 'https://www.klaviyo.com/account#api-keys-tab',
+    connectLabel: 'Open Klaviyo API Keys',
   },
   gong: {
     label: 'Access Key',
     placeholder: 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx',
-    instructions: 'In Gong, go to Settings → Ecosystem → API. Create API credentials. You need both the Access Key and Access Key Secret.',
+    instructions: 'In Gong, go to Settings → Ecosystem → API. Create API credentials and copy both the Access Key and Secret.',
     scopes: ['calls:read', 'users:read', 'library:read'],
-    docsLabel: 'Gong API docs',
+    connectUrl: 'https://app.gong.io/settings/api',
+    connectLabel: 'Open Gong API Settings',
     secondFieldLabel: 'Access Key Secret',
     secondFieldPlaceholder: 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx',
   },
   zapier: {
     label: 'Webhook URL',
     placeholder: 'https://hooks.zapier.com/hooks/catch/xxxxxxx/xxxxxxx/',
-    instructions: 'In Zapier, create a new Zap with "Webhooks by Zapier" as the trigger. Select "Catch Hook", then copy the webhook URL shown.',
+    instructions: 'In Zapier, create a Zap with "Webhooks by Zapier" as the trigger, select "Catch Hook", then copy the webhook URL.',
     scopes: ['POST events from IntegroAI agents'],
-    docsLabel: 'Zapier Webhooks docs',
+    connectUrl: 'https://zapier.com/app/zaps',
+    connectLabel: 'Open Zapier',
   },
 }
 
@@ -257,87 +263,81 @@ export default function ConnectModal({ provider, name, logo, logoColor, mode, on
           {/* Step 2: Credentials */}
           {step === 2 && (
             <div>
-              {isOAuth ? (
-                <div>
-                  <p style={{ fontSize: 13, color: 'var(--ink-m)', marginBottom: 20, lineHeight: 1.5 }}>
-                    Click the button below to be redirected to <strong>{name}</strong> for OAuth authorization. A popup window will open — allow it if your browser blocks it.
-                  </p>
+              {/* Big connect button — OAuth triggers auth flow, API key opens credentials page */}
+              <p style={{ fontSize: 13, color: 'var(--ink-m)', marginBottom: 20, lineHeight: 1.5 }}>
+                {isOAuth
+                  ? <>Click the button below to be redirected to <strong>{name}</strong> for OAuth authorization. A popup window will open — allow it if your browser blocks it.</>
+                  : <>Click the button below to open <strong>{name}</strong> and copy your API credentials. Then paste them in the field below.</>
+                }
+              </p>
 
-                  {oauthError && (
-                    <div style={{ padding: '10px 14px', borderRadius: 8, background: '#fdecea', border: '1px solid rgba(192,57,43,0.25)', marginBottom: 16, fontSize: 12, color: '#c0392b', display: 'flex', alignItems: 'flex-start', gap: 8 }}>
-                      <Icon name="error" size={13} style={{ color: '#c0392b', flexShrink: 0, marginTop: 1 }} />
-                      <span>{oauthError}</span>
-                    </div>
-                  )}
-
-                  <button
-                    className="btn-sm btn-sm-primary"
-                    style={{ width: '100%', padding: '14px', fontSize: 14 }}
-                    onClick={handleOAuth}
-                    disabled={oauthLoading}
-                  >
-                    {oauthLoading ? (
-                      <span className="btn-loading"><span />Waiting for authorization...</span>
-                    ) : (
-                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                        Connect with {name} <Icon name="arrowRight" size={12} />
-                      </span>
-                    )}
-                  </button>
-
-                  <div style={{ textAlign: 'center', margin: '16px 0 12px', color: 'var(--ink-l)', fontSize: 11, fontFamily: "'DM Mono',monospace", letterSpacing: '0.05em', textTransform: 'uppercase' }}>or use a manual token</div>
-
-                  <div className="form-group" style={{ marginBottom: 0 }}>
-                    <label className="form-label">Access Token (advanced)</label>
-                    <input
-                      type="password"
-                      className="form-input"
-                      placeholder="Paste OAuth access token directly..."
-                      value={apiKey}
-                      onChange={e => { setApiKey(e.target.value); setTestResult(null); setOauthError(null) }}
-                    />
-                  </div>
+              {oauthError && (
+                <div style={{ padding: '10px 14px', borderRadius: 8, background: '#fdecea', border: '1px solid rgba(192,57,43,0.25)', marginBottom: 16, fontSize: 12, color: '#c0392b', display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+                  <Icon name="error" size={13} style={{ color: '#c0392b', flexShrink: 0, marginTop: 1 }} />
+                  <span>{oauthError}</span>
                 </div>
-              ) : cfg ? (
-                <div>
-                  <div className="form-group" style={{ marginBottom: cfg.secondFieldLabel ? 12 : 8 }}>
-                    <label className="form-label">{cfg.label}</label>
-                    <input
-                      type="password"
-                      className="form-input"
-                      placeholder={cfg.placeholder}
-                      value={apiKey}
-                      onChange={e => { setApiKey(e.target.value); setTestResult(null) }}
-                      autoFocus
-                    />
-                  </div>
+              )}
 
-                  {cfg.secondFieldLabel && (
-                    <div className="form-group" style={{ marginBottom: 8 }}>
-                      <label className="form-label">{cfg.secondFieldLabel}</label>
-                      <input
-                        type="password"
-                        className="form-input"
-                        placeholder={cfg.secondFieldPlaceholder}
-                        value={secondKey}
-                        onChange={e => { setSecondKey(e.target.value); setTestResult(null) }}
-                      />
-                    </div>
-                  )}
+              <button
+                className="btn-sm btn-sm-primary"
+                style={{ width: '100%', padding: '14px', fontSize: 14 }}
+                onClick={isOAuth ? handleOAuth : () => window.open(cfg?.connectUrl, '_blank')}
+                disabled={oauthLoading}
+              >
+                {oauthLoading ? (
+                  <span className="btn-loading"><span />Waiting for authorization...</span>
+                ) : (
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                    {isOAuth ? `Connect with ${name}` : (cfg?.connectLabel ?? `Open ${name}`)}
+                    <Icon name="arrowRight" size={12} />
+                  </span>
+                )}
+              </button>
 
-                  {testResult && !testResult.ok && (
-                    <div style={{ fontSize: 11, color: '#c0392b', marginTop: 6, lineHeight: 1.4, display: 'flex', alignItems: 'center', gap: 5 }}>
-                      <Icon name="error" size={11} style={{ color: '#c0392b', flexShrink: 0 }} /> {testResult.error}
-                    </div>
-                  )}
-                  {testResult && testResult.ok && (
-                    <div style={{ fontSize: 11, color: '#2a7d4f', marginTop: 6, display: 'flex', alignItems: 'center', gap: 5 }}>
-                      <Icon name="check" size={11} style={{ color: '#2a7d4f', flexShrink: 0 }} /> Connection verified
-                      {testResult.data?.total !== undefined && ` — ${testResult.data.total.toLocaleString()} records`}
-                      {testResult.data?.team && ` — workspace: ${testResult.data.team}`}
-                      {testResult.data?.credits_limit !== undefined && ` — ${testResult.data.credits_used?.toLocaleString() ?? 0} / ${testResult.data.credits_limit.toLocaleString()} credits`}
-                    </div>
-                  )}
+              <div style={{ textAlign: 'center', margin: '16px 0 12px', color: 'var(--ink-l)', fontSize: 11, fontFamily: "'DM Mono',monospace", letterSpacing: '0.05em', textTransform: 'uppercase' }}>
+                {isOAuth ? 'or use a manual token' : 'then paste your key below'}
+              </div>
+
+              <div className="form-group" style={{ marginBottom: cfg?.secondFieldLabel ? 12 : 8 }}>
+                <label className="form-label">{isOAuth ? 'Access Token (advanced)' : (cfg?.label ?? 'API Key')}</label>
+                <input
+                  type="password"
+                  className="form-input"
+                  placeholder={isOAuth ? 'Paste OAuth access token directly...' : (cfg?.placeholder ?? '')}
+                  value={apiKey}
+                  onChange={e => { setApiKey(e.target.value); setTestResult(null); setOauthError(null) }}
+                />
+              </div>
+
+              {!isOAuth && cfg?.secondFieldLabel && (
+                <div className="form-group" style={{ marginBottom: 8 }}>
+                  <label className="form-label">{cfg.secondFieldLabel}</label>
+                  <input
+                    type="password"
+                    className="form-input"
+                    placeholder={cfg.secondFieldPlaceholder}
+                    value={secondKey}
+                    onChange={e => { setSecondKey(e.target.value); setTestResult(null) }}
+                  />
+                </div>
+              )}
+
+              {testResult && !testResult.ok && (
+                <div style={{ fontSize: 11, color: '#c0392b', marginTop: 6, lineHeight: 1.4, display: 'flex', alignItems: 'center', gap: 5 }}>
+                  <Icon name="error" size={11} style={{ color: '#c0392b', flexShrink: 0 }} /> {testResult.error}
+                </div>
+              )}
+              {testResult && testResult.ok && (
+                <div style={{ fontSize: 11, color: '#2a7d4f', marginTop: 6, display: 'flex', alignItems: 'center', gap: 5 }}>
+                  <Icon name="check" size={11} style={{ color: '#2a7d4f', flexShrink: 0 }} /> Connection verified
+                  {testResult.data?.total !== undefined && ` — ${testResult.data.total.toLocaleString()} records`}
+                  {testResult.data?.team && ` — workspace: ${testResult.data.team}`}
+                  {testResult.data?.credits_limit !== undefined && ` — ${testResult.data.credits_used?.toLocaleString() ?? 0} / ${testResult.data.credits_limit.toLocaleString()} credits`}
+                </div>
+              )}
+
+              {!isOAuth && apiKey.trim() && (
+                <>
                   <div style={{ fontSize: 11, color: 'var(--ink-l)', marginTop: 8 }}>
                     Keys are encrypted before storage and never exposed in the UI after saving.
                   </div>
@@ -345,14 +345,12 @@ export default function ConnectModal({ provider, name, logo, logoColor, mode, on
                     className="btn-sm btn-sm-ghost"
                     style={{ marginTop: 12, fontSize: 11 }}
                     onClick={handleTest}
-                    disabled={testing || !apiKey.trim()}
+                    disabled={testing}
                   >
-                    {testing ? (
-                      <span className="btn-loading"><span />Testing...</span>
-                    ) : 'Test Connection'}
+                    {testing ? <span className="btn-loading"><span />Testing...</span> : 'Test Connection'}
                   </button>
-                </div>
-              ) : null}
+                </>
+              )}
             </div>
           )}
 
@@ -385,32 +383,23 @@ export default function ConnectModal({ provider, name, logo, logoColor, mode, on
             {step > 1 && (
               <button className="btn-sm btn-sm-ghost" onClick={() => setStep(s => (s - 1) as Step)}>Back</button>
             )}
-            {step < 3 && !(step === 2 && isOAuth) && (
+            {step < 3 && !(step === 2 && isOAuth && !apiKey.trim()) && (
               <button
                 className="btn-sm btn-sm-primary"
                 onClick={() => {
-                  if (step === 2 && !isOAuth && apiKey.trim() && !testResult?.ok) {
+                  if (step === 2 && apiKey.trim() && !testResult?.ok) {
                     handleTest()
                   } else {
                     setStep(s => (s + 1) as Step)
                   }
                 }}
-                disabled={step === 2 && !isOAuth && !apiKey.trim()}
+                disabled={step === 2 && !apiKey.trim()}
               >
-                {step === 2 && !isOAuth && !testResult?.ok ? 'Test & Continue' : (
+                {step === 2 && apiKey.trim() && !testResult?.ok ? 'Test & Continue' : (
                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
                     Continue <Icon name="arrowRight" size={11} />
                   </span>
                 )}
-              </button>
-            )}
-            {step === 2 && isOAuth && apiKey.trim() && !oauthLoading && (
-              <button
-                className="btn-sm btn-sm-ghost"
-                onClick={handleTest}
-                disabled={testing}
-              >
-                {testing ? <span className="btn-loading"><span />Testing...</span> : 'Use Manual Token'}
               </button>
             )}
             {step === 3 && (
