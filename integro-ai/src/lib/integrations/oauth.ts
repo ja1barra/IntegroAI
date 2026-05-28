@@ -35,9 +35,13 @@ const SCOPES: Partial<Record<Provider, string>> = {
   slack:      'channels:read chat:write users:read',
 }
 
+const FALLBACK_CLIENT_IDS: Partial<Record<Provider, string>> = {
+  linkedin: '86sagh3d2cd8rs',
+}
+
 function getClientId(provider: Provider): string | undefined {
   const key = `VITE_${provider.toUpperCase()}_CLIENT_ID`
-  return (import.meta.env as Record<string, string>)[key]
+  return (import.meta.env as Record<string, string>)[key] ?? FALLBACK_CLIENT_IDS[provider]
 }
 
 export function isOAuthProvider(provider: Provider): boolean {
