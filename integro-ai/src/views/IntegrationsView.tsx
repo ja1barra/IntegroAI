@@ -23,49 +23,20 @@ const DEFAULT_CONFIG: Integration['config'] = {
   syncFrequency: 'hourly',
 }
 
-const ACTIVE_INTEGRATIONS: Integration[] = [
-  {
-    id: 'hubspot', provider: 'hubspot', name: 'HubSpot CRM', logo: 'HS', logoColor: '#ff7a59', logoBg: '#fff3ee',
-    description: 'Two-way sync of contacts, deals, and timeline activities. Powers Outbound and Customer Success agents.',
-    tags: ['CRM', 'Contacts', 'Deals'],
-    status: 'connected', authType: 'private_app_token',
-    lastSync: '2 min ago', recordCount: 1247, workspaceName: 'Integro Strategies',
-    config: { ...DEFAULT_CONFIG, outbound: true, demandGen: true, customerSuccess: true, revenueIntelligence: false },
-  },
-  {
-    id: 'apollo', provider: 'apollo', name: 'Apollo.io', logo: 'AP', logoColor: '#3b4eeb', logoBg: '#eef3ff',
-    description: 'Prospect enrichment, contact search, and sequence enrollment. 8,432 prospects synced.',
-    tags: ['Outbound', 'Prospecting', 'Enrichment'],
-    status: 'connected', authType: 'api_key',
-    lastSync: '5 min ago', recordCount: 8432,
-    config: { ...DEFAULT_CONFIG, outbound: true, demandGen: true, customerSuccess: false, revenueIntelligence: false },
-  },
-  {
-    id: 'slack', provider: 'slack', name: 'Slack', logo: 'SL', logoColor: '#611f69', logoBg: '#f0f7ff',
-    description: 'Agent alerts, deal notifications, approval requests, and churn risk escalations.',
-    tags: ['Comms', 'Alerts', 'Approvals'],
-    status: 'connected', authType: 'api_key',
-    lastSync: '1 min ago', recordCount: 24, workspaceName: 'Integro Strategies',
-    config: { ...DEFAULT_CONFIG, outbound: true, demandGen: true, customerSuccess: true, revenueIntelligence: false, syncDeals: false, syncActivities: false },
-  },
-  {
-    id: 'klaviyo', provider: 'klaviyo', name: 'Klaviyo', logo: 'KL', logoColor: '#006bff', logoBg: '#fdf0f0',
-    description: 'Email list management, campaign triggers, and subscriber lifecycle data for Demand Gen.',
-    tags: ['Email', 'Marketing', 'Lists'],
-    status: 'error', authType: 'api_key',
-    errorMessage: 'API token expired on May 18 — syncing paused. Reconnect to resume.',
-    config: { ...DEFAULT_CONFIG, outbound: false, demandGen: true, customerSuccess: true, revenueIntelligence: false },
-  },
-]
+const ACTIVE_INTEGRATIONS: Integration[] = []
 
 const AVAILABLE_INTEGRATIONS: Integration[] = [
-  { id: 'salesforce', provider: 'salesforce', name: 'Salesforce',          logo: 'SF', logoColor: '#00a1e0', logoBg: '#e8f5fe', description: 'Enterprise CRM with advanced reporting and forecasting.',                    tags: ['CRM', 'Enterprise'],         status: 'available', authType: 'oauth',   config: { ...DEFAULT_CONFIG } },
-  { id: 'outreach',   provider: 'outreach',   name: 'Outreach',            logo: 'OR', logoColor: '#5951e5', logoBg: '#f0eeff', description: 'Sales engagement platform with sequence automation.',                       tags: ['Outbound', 'Sequences'],     status: 'available', authType: 'oauth',   config: { ...DEFAULT_CONFIG } },
-  { id: 'linkedin',   provider: 'linkedin',   name: 'LinkedIn Sales Nav',  logo: 'LI', logoColor: '#0077b5', logoBg: '#e8f2fa', description: 'Premium prospecting, InMail automation, and social selling.',              tags: ['Outbound', 'Social'],        status: 'available', authType: 'oauth',   config: { ...DEFAULT_CONFIG } },
-  { id: 'gong',       provider: 'gong',       name: 'Gong',                logo: 'GO', logoColor: '#8b2fc9', logoBg: '#f2eaff', description: 'Revenue intelligence from call recordings and coaching signals.',           tags: ['Intelligence', 'Calls'],     status: 'available', authType: 'api_key', config: { ...DEFAULT_CONFIG } },
-  { id: 'intercom',   provider: 'intercom',   name: 'Intercom',            logo: 'IC', logoColor: '#1f8dd6', logoBg: '#e8f4ff', description: 'Customer success messaging and product usage signals.',                    tags: ['Customer Success', 'Chat'],  status: 'available', authType: 'oauth',   config: { ...DEFAULT_CONFIG } },
-  { id: 'zapier',     provider: 'zapier',     name: 'Zapier',              logo: 'ZP', logoColor: '#ff4a00', logoBg: '#fff1ec', description: 'Webhook automation and 5,000+ app integrations.',                         tags: ['Automation', 'Webhooks'],    status: 'available', authType: 'api_key', config: { ...DEFAULT_CONFIG } },
-  { id: 'ga4',        provider: 'ga4',        name: 'Google Analytics 4',  logo: 'GA', logoColor: '#e37400', logoBg: '#fff8e8', description: 'Web traffic, conversion tracking, and campaign attribution.',              tags: ['Analytics', 'Marketing'],    status: 'available', authType: 'oauth',   config: { ...DEFAULT_CONFIG } },
+  { id: 'hubspot',    provider: 'hubspot',    name: 'HubSpot CRM',         logo: 'HS', logoColor: '#ff7a59', logoBg: '#fff3ee', description: 'Two-way sync of contacts, deals, and timeline activities.',               tags: ['CRM', 'Contacts', 'Deals'],  status: 'available', authType: 'private_app_token', config: { ...DEFAULT_CONFIG } },
+  { id: 'apollo',     provider: 'apollo',     name: 'Apollo.io',           logo: 'AP', logoColor: '#3b4eeb', logoBg: '#eef3ff', description: 'Prospect enrichment, contact search, and sequence enrollment.',            tags: ['Outbound', 'Prospecting'],   status: 'available', authType: 'api_key', config: { ...DEFAULT_CONFIG } },
+  { id: 'slack',      provider: 'slack',      name: 'Slack',               logo: 'SL', logoColor: '#611f69', logoBg: '#f0f7ff', description: 'Agent alerts, deal notifications, approval requests, and escalations.',   tags: ['Comms', 'Alerts'],           status: 'available', authType: 'api_key', config: { ...DEFAULT_CONFIG } },
+  { id: 'klaviyo',    provider: 'klaviyo',    name: 'Klaviyo',             logo: 'KL', logoColor: '#006bff', logoBg: '#fdf0f0', description: 'Email list management, campaign triggers, and subscriber lifecycle.',      tags: ['Email', 'Marketing'],        status: 'available', authType: 'api_key', config: { ...DEFAULT_CONFIG } },
+  { id: 'salesforce', provider: 'salesforce', name: 'Salesforce',          logo: 'SF', logoColor: '#00a1e0', logoBg: '#e8f5fe', description: 'Enterprise CRM with advanced reporting and forecasting.',                  tags: ['CRM', 'Enterprise'],         status: 'available', authType: 'oauth',   config: { ...DEFAULT_CONFIG } },
+  { id: 'outreach',   provider: 'outreach',   name: 'Outreach',            logo: 'OR', logoColor: '#5951e5', logoBg: '#f0eeff', description: 'Sales engagement platform with sequence automation.',                     tags: ['Outbound', 'Sequences'],     status: 'available', authType: 'oauth',   config: { ...DEFAULT_CONFIG } },
+  { id: 'linkedin',   provider: 'linkedin',   name: 'LinkedIn Sales Nav',  logo: 'LI', logoColor: '#0077b5', logoBg: '#e8f2fa', description: 'Premium prospecting, InMail automation, and social selling.',            tags: ['Outbound', 'Social'],        status: 'available', authType: 'oauth',   config: { ...DEFAULT_CONFIG } },
+  { id: 'gong',       provider: 'gong',       name: 'Gong',                logo: 'GO', logoColor: '#8b2fc9', logoBg: '#f2eaff', description: 'Revenue intelligence from call recordings and coaching signals.',         tags: ['Intelligence', 'Calls'],     status: 'available', authType: 'api_key', config: { ...DEFAULT_CONFIG } },
+  { id: 'intercom',   provider: 'intercom',   name: 'Intercom',            logo: 'IC', logoColor: '#1f8dd6', logoBg: '#e8f4ff', description: 'Customer success messaging and product usage signals.',                   tags: ['Customer Success', 'Chat'],  status: 'available', authType: 'oauth',   config: { ...DEFAULT_CONFIG } },
+  { id: 'zapier',     provider: 'zapier',     name: 'Zapier',              logo: 'ZP', logoColor: '#ff4a00', logoBg: '#fff1ec', description: 'Webhook automation and 5,000+ app integrations.',                        tags: ['Automation', 'Webhooks'],    status: 'available', authType: 'api_key', config: { ...DEFAULT_CONFIG } },
+  { id: 'ga4',        provider: 'ga4',        name: 'Google Analytics 4',  logo: 'GA', logoColor: '#e37400', logoBg: '#fff8e8', description: 'Web traffic, conversion tracking, and campaign attribution.',             tags: ['Analytics', 'Marketing'],    status: 'available', authType: 'oauth',   config: { ...DEFAULT_CONFIG } },
 ]
 
 function formatSyncTime(): string {
@@ -349,23 +320,25 @@ export default function IntegrationsView({ active, addToast }: { active: boolean
         </div>
       </div>
 
-      {/* Active integrations */}
-      <div style={{ marginBottom: 8 }}>
-        <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 9, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--ink-l)', marginBottom: 12 }}>Active Integrations</div>
-        <div className="grid-2" style={{ marginBottom: selectedIntegration ? 12 : 24 }}>
-          {activeIntegrations.map(int => (
-            <IntegrationCard
-              key={int.id}
-              {...int}
-              selected={selectedId === int.id}
-              onClick={() => {
-                if (int.status === 'error') { handleConnectClick(int) }
-                else { handleCardClick(int.id) }
-              }}
-            />
-          ))}
+      {/* Active integrations — only shown once something is connected */}
+      {activeIntegrations.length > 0 && (
+        <div style={{ marginBottom: 8 }}>
+          <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 9, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--ink-l)', marginBottom: 12 }}>Active Integrations</div>
+          <div className="grid-2" style={{ marginBottom: selectedIntegration ? 12 : 24 }}>
+            {activeIntegrations.map(int => (
+              <IntegrationCard
+                key={int.id}
+                {...int}
+                selected={selectedId === int.id}
+                onClick={() => {
+                  if (int.status === 'error') { handleConnectClick(int) }
+                  else { handleCardClick(int.id) }
+                }}
+              />
+            ))}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Detail panel */}
       {selectedIntegration && (
@@ -389,7 +362,7 @@ export default function IntegrationsView({ active, addToast }: { active: boolean
             View all <Icon name="arrowRight" size={10} />
           </span>
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 10 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 10 }}>
           {availableIntegrations.map(int => (
             <IntegrationCard
               key={int.id}
