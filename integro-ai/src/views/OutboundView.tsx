@@ -45,6 +45,7 @@ export default function OutboundView({ active, agentStates, toggleAgent, addToas
   function openBuilder() {
     setEditTarget(undefined)
     setBuilding(true)
+    setTab('sequences')
   }
 
   function cancelBuilder() {
