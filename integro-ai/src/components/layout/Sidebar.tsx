@@ -25,7 +25,7 @@ const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
     { id: 'outbound',       icon: 'outbound',        label: 'Outbound Sales',   agent: true, color: '#3ecf8e' },
     { id: 'demand',         icon: 'demandGen',       label: 'Demand Gen',       agent: true, color: '#f5a623' },
     { id: 'success',        icon: 'customerSuccess', label: 'Customer Success', agent: true, color: '#4d9de0' },
-    { id: 'playbook-agent', icon: 'agents',          label: 'Growth Playbooks', agent: true, color: '#9b59b6' },
+    { id: 'playbook-agent', icon: 'openBook',         label: 'Growth Playbooks', agent: true, color: '#9b59b6' },
   ]},
   { label: 'Settings', items: [
     { id: 'integrations', icon: 'integrations', label: 'Integrations' },
