@@ -143,10 +143,12 @@ export default function OutboundView({ active, agentStates, toggleAgent, addToas
             <ReviewTab
               messages={ob.messages}
               busy={ob.busy}
+              mailboxConnected={ob.mailboxConnected}
               onEdit={ob.editMessage}
               onApprove={ob.approveMessage}
               onDiscard={ob.discardMessage}
               onSendApproved={ob.sendApproved}
+              onConnectMailbox={ob.connectMailbox}
             />
           )}
         </>

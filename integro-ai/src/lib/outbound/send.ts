@@ -23,6 +23,17 @@ export interface SendResult {
 const ENDPOINT = '/api/agent/send'
 const MAILBOX_PROVIDERS = ['gmail', 'google', 'outreach']
 
+// OAuth credentials are stored as a JSON token bundle in key_encrypted.
+// Extract the usable bearer token (or fall back to a raw string).
+function extractToken(raw: string | null): string | null {
+  if (!raw) return null
+  try {
+    const parsed = JSON.parse(raw)
+    if (parsed && typeof parsed.access_token === 'string') return parsed.access_token
+  } catch { /* not JSON — treat as a raw token */ }
+  return raw
+}
+
 // Find a connected sending mailbox for the current user, if any.
 export async function getMailbox(): Promise<Mailbox | null> {
   const { data } = await supabase
@@ -33,7 +44,17 @@ export async function getMailbox(): Promise<Mailbox | null> {
     .limit(1)
   const row = (data as any[])?.[0]
   if (!row) return null
-  return { provider: row.provider, email: row.workspace_name ?? '', token: row.key_encrypted ?? null }
+  return { provider: row.provider, email: row.workspace_name ?? '', token: extractToken(row.key_encrypted) }
+}
+
+// Connect a Gmail sending mailbox via OAuth and persist the token.
+export async function connectGmail(): Promise<{ ok: boolean; error?: string }> {
+  const { startOAuthFlow, tokensToKey } = await import('../integrations/oauth')
+  const { saveCredential } = await import('../integrations/credentialStore')
+  const res = await startOAuthFlow('gmail')
+  if (!res.ok || !res.tokens) return { ok: false, error: res.error ?? 'Connection cancelled' }
+  await saveCredential('gmail', tokensToKey(res.tokens), { workspaceName: 'Gmail' })
+  return { ok: true }
 }
 
 function isDemoToken(t: string | null): boolean {

@@ -1,6 +1,38 @@
 # Integro AI — Revenue OS
 
-AI operating system for SaaS companies. Four autonomous agents — Outbound Sales, Demand Generation, Customer Success, and Growth Playbooks — all managed from a single dashboard.
+AI operating system for SaaS companies. **Agent 01 — Outbound Sales Machine** is
+live end-to-end: sync prospects from your CRM, generate AI-personalized email
+sequences, review them, and send through a connected mailbox. Demand Generation,
+Customer Success, and Growth Playbooks are on the roadmap.
+
+## Outbound Sales Machine (Agent 01)
+
+The working pipeline:
+
+1. **Sync prospects** — pull contacts from a connected HubSpot / Apollo account
+   (or add them manually). Persisted to Supabase.
+2. **Build a sequence** — a multi-step email sequence used as the personalization
+   template.
+3. **Enroll & generate** — select prospects and the agent writes a personalized
+   first email for each (Claude via `/api/agent/generate`), landing them in the
+   review queue.
+4. **Review & approve** — edit any draft, then approve.
+5. **Send** — approved emails send through your connected Gmail mailbox
+   (`/api/agent/send`).
+
+Every step degrades gracefully: with no `ANTHROPIC_API_KEY` it falls back to
+deterministic mail-merge personalization, and with no mailbox connected sends are
+simulated — so the product is always demoable.
+
+## Setup
+
+1. **Database** — in the Supabase SQL Editor, run `supabase/schema.sql` then
+   `supabase/outbound-schema.sql` (both idempotent).
+2. **Frontend env** — copy `.env.example` → `.env.local` and fill in your
+   Supabase URL + anon key.
+3. **Server env (Vercel)** — set the variables in the repo-root `.env.example`
+   (`ANTHROPIC_API_KEY` for live AI, `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`
+   for Gmail sending).
 
 ## Stack
 
@@ -56,12 +88,12 @@ src/
 
 ## Agents
 
-| # | Agent | Description |
-|---|-------|-------------|
-| 01 | Outbound Sales Machine | ICP identification, sequence execution, meeting booking |
-| 02 | Demand Generation | Content signals, paid performance, MQL routing |
-| 03 | Customer Success Engine | Health monitoring, churn risk, expansion tracking |
-| 04 | SaaS Growth Playbooks | Win/loss analysis, coaching signals, playbook generation |
+| # | Agent | Status | Description |
+|---|-------|--------|-------------|
+| 01 | Outbound Sales Machine | **Live** | CRM sync, AI sequencing, human review, mailbox send |
+| 02 | Demand Generation | Roadmap | Content signals, paid performance, MQL routing |
+| 03 | Customer Success Engine | Roadmap | Health monitoring, churn risk, expansion tracking |
+| 04 | SaaS Growth Playbooks | Roadmap | Win/loss analysis, coaching signals, playbook generation |
 
 ## Design System
 

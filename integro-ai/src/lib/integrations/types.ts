@@ -12,6 +12,7 @@ export type Provider =
   | 'intercom'
   | 'zapier'
   | 'ga4'
+  | 'gmail'
 export type SyncEventType = 'sync_complete' | 'sync_failed' | 'webhook_received' | 'rate_limit'
 
 export interface IntegrationConfig {

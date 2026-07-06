@@ -307,3 +307,52 @@ export async function finishRun(id: string | null, status: 'completed' | 'failed
     .update({ status, item_count: itemCount, error: error ?? null, completed_at: new Date().toISOString() })
     .eq('id', id)
 }
+
+// ── Dashboard summary ────────────────────────────────────────
+
+export interface RunLog {
+  id: string
+  kind: string
+  status: string
+  itemCount: number
+  createdAt: string
+}
+
+export interface DashboardSummary {
+  prospects: number
+  activeSequences: number
+  inSequence: number
+  sent: number
+  drafts: number
+  meetings: number
+  replyRate: number
+  recentRuns: RunLog[]
+}
+
+async function count(table: string, filters: Record<string, string> = {}): Promise<number> {
+  let q = supabase.from(table).select('id', { count: 'exact', head: true })
+  for (const [k, v] of Object.entries(filters)) q = q.eq(k, v)
+  const { count: c } = await q
+  return c ?? 0
+}
+
+export async function getDashboardSummary(): Promise<DashboardSummary> {
+  const [prospects, activeSequences, inSequence, sent, drafts, meetings, replied, runsRes] = await Promise.all([
+    count('prospects'),
+    count('sequences', { status: 'active' }),
+    count('enrollments', { status: 'active' }),
+    count('messages', { status: 'sent' }),
+    count('messages', { status: 'draft' }),
+    count('prospects', { status: 'meeting' }),
+    count('messages', { status: 'replied' }),
+    supabase.from('agent_runs').select('id, kind, status, item_count, created_at').order('created_at', { ascending: false }).limit(6),
+  ])
+  const recentRuns: RunLog[] = ((runsRes.data as any[]) ?? []).map(r => ({
+    id: r.id, kind: r.kind, status: r.status, itemCount: r.item_count ?? 0, createdAt: r.created_at,
+  }))
+  return {
+    prospects, activeSequences, inSequence, sent, drafts, meetings,
+    replyRate: sent ? Math.round((replied / sent) * 100) : 0,
+    recentRuns,
+  }
+}

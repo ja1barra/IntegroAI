@@ -6,13 +6,15 @@ import type { Message } from '../../lib/outbound/types'
 interface Props {
   messages: Message[]
   busy: string | null
+  mailboxConnected: boolean
   onEdit: (id: string, patch: { subject?: string; body?: string }) => void
   onApprove: (id: string) => void
   onDiscard: (id: string) => void
   onSendApproved: () => void
+  onConnectMailbox: () => void
 }
 
-export default function ReviewTab({ messages, busy, onEdit, onApprove, onDiscard, onSendApproved }: Props) {
+export default function ReviewTab({ messages, busy, mailboxConnected, onEdit, onApprove, onDiscard, onSendApproved, onConnectMailbox }: Props) {
   const drafts   = messages.filter(m => m.status === 'draft')
   const approved = messages.filter(m => m.status === 'approved')
   const sent     = messages.filter(m => m.status === 'sent')
@@ -39,12 +41,21 @@ export default function ReviewTab({ messages, busy, onEdit, onApprove, onDiscard
         <div className="card-title">
           Review Queue — {drafts.length} draft{drafts.length === 1 ? '' : 's'}, {approved.length} approved
         </div>
-        <div style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
           {(sent.length > 0 || failed.length > 0) && (
             <span style={{ fontSize: 11, color: 'var(--ink-l)' }}>
               {sent.length} sent{failed.length ? ` · ${failed.length} failed` : ''}
             </span>
           )}
+          <button
+            className={`ob-mailbox-chip${mailboxConnected ? ' ob-mailbox-on' : ''}`}
+            onClick={onConnectMailbox}
+            disabled={busy === 'mailbox'}
+            title={mailboxConnected ? 'Mailbox connected' : 'Connect a Gmail mailbox to send for real'}
+          >
+            <Icon name={mailboxConnected ? 'checkCircle' : 'mail'} size={12} />
+            {busy === 'mailbox' ? 'Connecting…' : mailboxConnected ? 'Mailbox connected' : 'Connect mailbox'}
+          </button>
           <button
             className="btn-sm btn-sm-primary"
             disabled={approved.length === 0 || sending}

@@ -1370,3 +1370,20 @@ body {
 .ob-check-title { font-size:14px; font-weight:600; color:var(--ink); margin-bottom:2px; }
 .ob-check-done .ob-check-title { color:var(--ink-l); text-decoration:line-through; }
 .ob-check-desc { font-size:12px; color:var(--ink-l); line-height:1.5; }
+
+/* Mailbox connect chip */
+.ob-mailbox-chip {
+  display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:500;
+  padding:6px 12px; border-radius:var(--radius-pill); cursor:pointer;
+  background:rgba(255,255,255,0.5); color:var(--ink-m);
+  border:1px solid var(--rule); transition:all 0.15s;
+}
+.ob-mailbox-chip:hover { background:rgba(255,255,255,0.8); border-color:var(--ink-l); }
+.ob-mailbox-chip:disabled { opacity:0.6; cursor:default; }
+.ob-mailbox-on { background:rgba(16,185,129,0.10); color:#059669; border-color:rgba(16,185,129,0.35); }
+.ob-mailbox-on:hover { background:rgba(16,185,129,0.14); border-color:rgba(16,185,129,0.5); }
+
+/* Dashboard activity dots */
+.activity-item { gap:10px; }
+.activity-dot { background:#3ecf8e; margin-top:5px; }
+.activity-dot-fail { background:#c0392b; }

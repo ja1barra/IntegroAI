@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react'
 import type { Prospect, Sequence, Message, Enrollment, OutboundStats, ProspectInput } from '../lib/outbound/types'
 import * as store from '../lib/outbound/store'
 import { generateDrafts, type Sender } from '../lib/outbound/generate'
-import { getMailbox, sendEmail } from '../lib/outbound/send'
+import { getMailbox, sendEmail, connectGmail, type Mailbox } from '../lib/outbound/send'
 import { syncCrmProspects } from '../lib/outbound/sync'
 
 type Notify = (msg: string, type?: 'success' | 'error') => void
@@ -14,16 +14,18 @@ export function useOutbound(sender: Sender, notify: Notify) {
   const [messages, setMessages]       = useState<Message[]>([])
   const [loading, setLoading]         = useState(true)
   const [busy, setBusy]               = useState<string | null>(null)   // label of in-flight action
+  const [mailbox, setMailbox]         = useState<Mailbox | null>(null)
 
   const reload = useCallback(async () => {
     try {
-      const [p, s, e, m] = await Promise.all([
+      const [p, s, e, m, mb] = await Promise.all([
         store.listProspects(),
         store.listSequences(),
         store.listEnrollments(),
         store.listMessages(),
+        getMailbox().catch(() => null),
       ])
-      setProspects(p); setSequences(s); setEnrollments(e); setMessages(m)
+      setProspects(p); setSequences(s); setEnrollments(e); setMessages(m); setMailbox(mb)
     } catch (err) {
       notify(err instanceof Error ? err.message : 'Failed to load outbound data', 'error')
     } finally {
@@ -178,18 +180,18 @@ export function useOutbound(sender: Sender, notify: Notify) {
     if (approved.length === 0) { notify('No approved emails to send', 'error'); return }
     setBusy('send')
     const run = await store.startRun('send', { count: approved.length })
-    const mailbox = await getMailbox()
+    const mb = await getMailbox()
     let sent = 0, failed = 0
     try {
       for (const m of approved) {
-        const ok = await sendOne(m.id, mailbox)
+        const ok = await sendOne(m.id, mb)
         ok ? sent++ : failed++
       }
       await store.finishRun(run, 'completed', sent)
       await reload()
-      const via = mailbox && mailbox.token && !mailbox.token.includes('demo') ? mailbox.provider : 'demo mailbox'
+      const via = mb && mb.token && !mb.token.includes('demo') ? mb.provider : 'demo mailbox'
       notify(
-        `${sent} email${sent === 1 ? '' : 's'} sent via ${via}${failed ? `, ${failed} failed` : ''}${!mailbox ? ' — connect a mailbox to send for real' : ''}`,
+        `${sent} email${sent === 1 ? '' : 's'} sent via ${via}${failed ? `, ${failed} failed` : ''}${!mb ? ' — connect a mailbox to send for real' : ''}`,
         failed ? 'error' : 'success',
       )
     } catch (err) {
@@ -199,6 +201,17 @@ export function useOutbound(sender: Sender, notify: Notify) {
       setBusy(null)
     }
   }, [messages, sendOne, notify, reload])
+
+  const connectMailbox = useCallback(async () => {
+    setBusy('mailbox')
+    try {
+      const res = await connectGmail()
+      if (res.ok) { setMailbox(await getMailbox()); notify('Gmail mailbox connected — emails will send for real') }
+      else notify(res.error ?? 'Could not connect mailbox', 'error')
+    } finally {
+      setBusy(null)
+    }
+  }, [notify])
 
   // ── Derived stats ──────────────────────────────────────────
   const stats: OutboundStats = useMemo(() => {
@@ -217,12 +230,15 @@ export function useOutbound(sender: Sender, notify: Notify) {
     }
   }, [enrollments, messages, prospects])
 
+  const mailboxConnected = !!(mailbox && mailbox.token && !mailbox.token.includes('demo'))
+
   return {
     prospects, sequences, enrollments, messages, loading, busy, stats,
+    mailbox, mailboxConnected,
     reload,
     syncProspects, addProspect, removeProspect,
     saveSequence, removeSequence, toggleSequenceActive,
     enrollAndGenerate,
-    editMessage, approveMessage, discardMessage, sendApproved,
+    editMessage, approveMessage, discardMessage, sendApproved, connectMailbox,
   }
 }
