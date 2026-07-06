@@ -1280,3 +1280,93 @@ body {
   color:#c0392b; background:rgba(192,57,43,0.08);
   border-color:rgba(192,57,43,0.28);
 }
+/* ══ Outbound Sales Machine ═══════════════════════════════════ */
+
+/* Prospects table */
+.otbl { width:100%; border-collapse:collapse; font-size:13px; }
+.otbl thead th {
+  text-align:left; font-family:'DM Mono',monospace; font-size:9px;
+  letter-spacing:0.09em; text-transform:uppercase; color:var(--ink-l);
+  font-weight:500; padding:8px 10px; border-bottom:1px solid var(--rule);
+}
+.otbl tbody td { padding:10px; border-bottom:1px solid var(--rule-m); vertical-align:middle; }
+.otbl tbody tr:hover { background:rgba(255,255,255,0.30); }
+.otbl input[type="checkbox"] { width:15px; height:15px; accent-color:var(--orange); cursor:pointer; }
+.ob-row-sel { background:rgba(212,80,26,0.05)!important; }
+.ob-name { font-weight:500; color:var(--ink); }
+.ob-sub  { font-size:11px; color:var(--ink-l); font-weight:400; }
+.ob-cell { color:var(--ink-m); }
+
+/* Prospect status pills */
+.pstatus {
+  display:inline-block; font-size:10px; font-weight:600; padding:3px 9px;
+  border-radius:var(--radius-pill); letter-spacing:0.02em; white-space:nowrap;
+}
+.pstatus-new          { background:rgba(122,114,104,0.12); color:var(--ink-l); }
+.pstatus-enrolled     { background:rgba(212,80,26,0.12);  color:var(--orange); }
+.pstatus-contacted    { background:rgba(59,130,246,0.14); color:#2563eb; }
+.pstatus-replied      { background:rgba(16,185,129,0.16); color:#059669; }
+.pstatus-meeting      { background:rgba(16,185,129,0.20); color:#047857; }
+.pstatus-bounced,
+.pstatus-unsubscribed { background:rgba(192,57,43,0.12);  color:#c0392b; }
+
+/* Bulk action bar */
+.ob-actionbar {
+  display:flex; align-items:center; gap:10px; padding:10px 12px; margin-bottom:12px;
+  background:rgba(212,80,26,0.06); border:1px solid rgba(212,80,26,0.20);
+  border-radius:var(--radius-sm);
+}
+.ob-actionbar-count { font-size:12px; font-weight:600; color:var(--orange); }
+.ob-seq-select { padding:6px 10px; font-size:12px; width:auto; min-width:180px; }
+
+/* Add-prospect inline form */
+.ob-addform {
+  display:flex; flex-wrap:wrap; gap:8px; align-items:center; padding:12px;
+  margin-bottom:12px; background:rgba(255,255,255,0.35);
+  border:1px solid var(--rule); border-radius:var(--radius-sm);
+}
+.ob-addform .form-input { flex:1; min-width:120px; padding:6px 10px; font-size:12px; }
+
+/* Review queue */
+.ob-review-list { display:flex; flex-direction:column; gap:12px; }
+.ob-review-card {
+  border:1px solid var(--rule); border-radius:var(--radius-sm);
+  padding:14px 16px; background:rgba(255,255,255,0.30);
+}
+.ob-review-card.ob-approved { border-color:rgba(16,185,129,0.35); background:rgba(16,185,129,0.05); }
+.ob-review-head { display:flex; align-items:flex-start; justify-content:space-between; gap:10px; margin-bottom:10px; }
+.ob-review-badges { display:flex; align-items:center; gap:6px; flex-shrink:0; }
+.ob-tag {
+  font-size:9px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase;
+  padding:2px 7px; border-radius:var(--radius-pill);
+  background:rgba(122,114,104,0.14); color:var(--ink-l);
+}
+.ob-tag-ai { background:rgba(124,58,237,0.14); color:#7c3aed; }
+.ob-review-subject { font-size:13px; font-weight:600; color:var(--ink); margin-bottom:6px; }
+.ob-review-body {
+  font-size:12.5px; color:var(--ink-m); line-height:1.6; white-space:pre-wrap;
+  max-height:180px; overflow-y:auto; margin-bottom:12px;
+  padding:10px 12px; background:rgba(255,255,255,0.40); border-radius:8px;
+}
+.ob-review-actions { display:flex; align-items:center; gap:8px; }
+
+.ob-sent { margin-top:16px; }
+.ob-sent summary { font-size:11px; color:var(--ink-l); cursor:pointer; padding:6px 0; text-transform:uppercase; letter-spacing:0.06em; }
+.ob-sent-row { display:flex; align-items:center; gap:10px; padding:7px 4px; color:#059669; border-top:1px solid var(--rule-m); font-size:12px; }
+.ob-sent-row .ob-name { color:var(--ink); }
+.ob-sent-row .ob-sub { flex:1; }
+
+/* Overview checklist */
+.ob-checklist { display:flex; flex-direction:column; gap:2px; }
+.ob-check { display:flex; align-items:center; gap:14px; padding:16px 6px; border-bottom:1px solid var(--rule-m); }
+.ob-check:last-child { border-bottom:none; }
+.ob-check-icon {
+  width:34px; height:34px; border-radius:50%; flex-shrink:0;
+  display:flex; align-items:center; justify-content:center;
+  background:rgba(122,114,104,0.10); color:var(--ink-l);
+}
+.ob-check-done .ob-check-icon { background:rgba(16,185,129,0.14); color:#059669; }
+.ob-check-num { font-family:'DM Mono',monospace; font-size:13px; font-weight:600; }
+.ob-check-title { font-size:14px; font-weight:600; color:var(--ink); margin-bottom:2px; }
+.ob-check-done .ob-check-title { color:var(--ink-l); text-decoration:line-through; }
+.ob-check-desc { font-size:12px; color:var(--ink-l); line-height:1.5; }

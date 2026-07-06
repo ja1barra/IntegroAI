@@ -148,7 +148,7 @@ export default function AppShell({ user, userId, onLogout }: { user: User; userI
         <main className="main" onClick={() => setNotifOpen(false)}>
           <Dashboard         active={view === 'dashboard'}       onNavigate={setView} onNewTask={() => openTaskModal()} {...sharedProps} />
           <TasksView         active={view === 'tasks'}           tasks={tasks} onUpdateTask={updateTask} onDeleteTask={deleteTask} onOpenModal={openTaskModal} />
-          <OutboundView      active={view === 'outbound'}         {...sharedProps} />
+          <OutboundView      active={view === 'outbound'}         {...sharedProps} user={user} />
           <DemandView        active={view === 'demand'}           {...sharedProps} />
           <SuccessView       active={view === 'success'}          {...sharedProps} />
           <PlaybookAgentView active={view === 'playbook-agent'}   {...sharedProps} />

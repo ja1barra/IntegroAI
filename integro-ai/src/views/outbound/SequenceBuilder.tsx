@@ -1,23 +1,8 @@
 import React, { useState } from 'react'
 import { Icon } from '../../components/ui/Icon'
+import type { StepType, SequenceStep, Sequence } from '../../lib/outbound/types'
 
-export type StepType = 'email' | 'linkedin' | 'call'
-
-export interface SequenceStep {
-  id: string
-  type: StepType
-  delay: number   // step 0: days from enrollment; step 1+: days after previous
-  subject: string
-  body: string
-}
-
-export interface Sequence {
-  id: string
-  name: string
-  steps: SequenceStep[]
-  status: 'draft' | 'active'
-  createdAt: string
-}
+export type { StepType, SequenceStep, Sequence }
 
 interface Props {
   onSave: (seq: Sequence) => void
