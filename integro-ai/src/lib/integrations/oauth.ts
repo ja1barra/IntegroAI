@@ -23,6 +23,7 @@ const AUTH_URLS: Partial<Record<Provider, string>> = {
   linkedin:   'https://www.linkedin.com/oauth/v2/authorization',
   intercom:   'https://app.intercom.com/oauth',
   ga4:        'https://accounts.google.com/o/oauth2/v2/auth',
+  gmail:      'https://accounts.google.com/o/oauth2/v2/auth',
   slack:      'https://slack.com/oauth/v2/authorize',
 }
 
@@ -32,6 +33,7 @@ const SCOPES: Partial<Record<Provider, string>> = {
   linkedin:   'r_liteprofile r_emailaddress',
   intercom:   'read_contacts write_conversations',
   ga4:        'https://www.googleapis.com/auth/analytics.readonly',
+  gmail:      'https://www.googleapis.com/auth/gmail.send email',
   slack:      'channels:read chat:write users:read',
 }
 
@@ -40,8 +42,13 @@ const FALLBACK_CLIENT_IDS: Partial<Record<Provider, string>> = {
 }
 
 function getClientId(provider: Provider): string | undefined {
+  const env = import.meta.env as Record<string, string>
   const key = `VITE_${provider.toUpperCase()}_CLIENT_ID`
-  return (import.meta.env as Record<string, string>)[key] ?? FALLBACK_CLIENT_IDS[provider]
+  // Gmail and GA4 share one Google OAuth app — fall back across the aliases.
+  if (provider === 'gmail') {
+    return env.VITE_GMAIL_CLIENT_ID ?? env.VITE_GOOGLE_CLIENT_ID ?? env.VITE_GA4_CLIENT_ID ?? FALLBACK_CLIENT_IDS[provider]
+  }
+  return env[key] ?? FALLBACK_CLIENT_IDS[provider]
 }
 
 export function isOAuthProvider(provider: Provider): boolean {
@@ -67,7 +74,7 @@ export function buildOAuthUrl(provider: Provider): string | null {
     state,
   })
 
-  if (provider === 'salesforce' || provider === 'ga4') {
+  if (provider === 'salesforce' || provider === 'ga4' || provider === 'gmail') {
     params.set('access_type', 'offline')
     params.set('prompt', 'consent')
   }

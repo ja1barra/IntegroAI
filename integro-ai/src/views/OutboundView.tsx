@@ -1,57 +1,38 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import StatCard from '../components/ui/StatCard'
 import AgentPill from '../components/ui/AgentPill'
-import EmptyState from '../components/ui/EmptyState'
 import { Icon } from '../components/ui/Icon'
-import SequenceBuilder, { type Sequence } from './outbound/SequenceBuilder'
-import type { SharedViewProps } from '../types'
+import SequenceBuilder from './outbound/SequenceBuilder'
+import ProspectsTab from './outbound/ProspectsTab'
+import ReviewTab from './outbound/ReviewTab'
+import { useOutbound } from '../hooks/useOutbound'
+import type { SharedViewProps, User } from '../types'
+import type { Sequence } from '../lib/outbound/types'
 
-export default function OutboundView({ active, agentStates, toggleAgent, addToast }: SharedViewProps) {
-  const [tab,       setTab]       = useState('overview')
-  const [search,    setSearch]    = useState('')
-  const [sequences, setSequences] = useState<Sequence[]>([])
-  const [building,  setBuilding]  = useState(false)
+export default function OutboundView({ active, agentStates, toggleAgent, addToast, user }: SharedViewProps & { user: User }) {
+  const sender = useMemo(() => ({ name: user.name, company: user.org }), [user])
+  const ob = useOutbound(sender, addToast)
+
+  const [tab, setTab]           = useState('overview')
+  const [building, setBuilding] = useState(false)
   const [editTarget, setEditTarget] = useState<Sequence | undefined>(undefined)
 
   const isRunning = agentStates.outbound === 'running'
-
-  function handleSave(seq: Sequence) {
-    setSequences(prev =>
-      prev.some(s => s.id === seq.id)
-        ? prev.map(s => s.id === seq.id ? seq : s)
-        : [...prev, seq]
-    )
-    setBuilding(false)
-    setEditTarget(undefined)
-    addToast(`Sequence "${seq.name}" saved`, 'success')
-  }
-
-  function handleEdit(seq: Sequence) {
-    setEditTarget(seq)
-    setBuilding(true)
-  }
-
-  function handleDelete(id: string) {
-    setSequences(prev => prev.filter(s => s.id !== id))
-    addToast('Sequence deleted')
-  }
-
-  function handleActivate(id: string) {
-    setSequences(prev =>
-      prev.map(s => s.id === id ? { ...s, status: s.status === 'active' ? 'draft' : 'active' } : s)
-    )
-  }
 
   function openBuilder() {
     setEditTarget(undefined)
     setBuilding(true)
     setTab('sequences')
   }
+  function cancelBuilder() { setBuilding(false); setEditTarget(undefined) }
 
-  function cancelBuilder() {
+  async function handleSave(seq: Sequence) {
+    await ob.saveSequence(seq)
     setBuilding(false)
     setEditTarget(undefined)
   }
+
+  const draftCount = ob.messages.filter(m => m.status === 'draft' || m.status === 'approved').length + ob.dueFollowups.length
 
   return (
     <div className={`view ${active ? 'active' : ''}`}>
@@ -64,150 +45,182 @@ export default function OutboundView({ active, agentStates, toggleAgent, addToas
             <div className="display agent-view-name">Outbound Sales Machine</div>
             <AgentPill status={agentStates.outbound} />
           </div>
-          <div className="agent-view-sub">ICP identification · Sequence execution · Meeting booking · Handoff</div>
+          <div className="agent-view-sub">ICP sync · AI sequencing · Human review · Auto-send</div>
         </div>
         <div className="agent-controls">
           <button className="control-btn" onClick={() => { toggleAgent('outbound'); addToast(isRunning ? 'Agent paused' : 'Agent resumed') }}>
             {isRunning ? 'Pause Agent' : 'Resume Agent'}
           </button>
-          <button className="control-btn">Settings</button>
           <button className="btn-sm btn-sm-primary" onClick={openBuilder}>+ New Sequence</button>
         </div>
       </div>
 
       {/* ── Stats ────────────────────────────────── */}
       <div className="stats-row">
-        {[
-          { label: 'In Sequence',     value: '--' },
-          { label: 'Open Rate',       value: '--' },
-          { label: 'Reply Rate',      value: '--' },
-          { label: 'Meetings Booked', value: '--' },
-        ].map(s => <StatCard key={s.label} {...s} active={active} />)}
+        <StatCard label="In Sequence"     value={String(ob.stats.inSequence)} active={active} />
+        <StatCard label="Emails Sent"     value={String(ob.stats.sent)} active={active} />
+        <StatCard label="Reply Rate"      value={String(ob.stats.replyRate)} unit="%" active={active} />
+        <StatCard label="Meetings Booked" value={String(ob.stats.meetings)} active={active} />
       </div>
 
       {/* ── Tabs ─────────────────────────────────── */}
       <div className="tabs">
-        {['overview', 'prospects', 'sequences'].map(t => (
-          <div key={t} className={`tab ${tab === t ? 'active' : ''}`} onClick={() => setTab(t)}>
-            {t[0].toUpperCase() + t.slice(1)}
-            {t === 'sequences' && sequences.length > 0 && (
-              <span className="tab-count">{sequences.length}</span>
-            )}
+        {[
+          { k: 'overview',  label: 'Overview' },
+          { k: 'prospects', label: 'Prospects', count: ob.prospects.length },
+          { k: 'sequences', label: 'Sequences', count: ob.sequences.length },
+          { k: 'review',    label: 'Review',    count: draftCount },
+        ].map(t => (
+          <div key={t.k} className={`tab ${tab === t.k ? 'active' : ''}`} onClick={() => setTab(t.k)}>
+            {t.label}
+            {!!t.count && t.count > 0 && <span className={`tab-count ${tab === t.k ? 'tab-count-active' : ''}`}>{t.count}</span>}
           </div>
         ))}
       </div>
 
-      {/* ── Overview tab ─────────────────────────── */}
-      {tab === 'overview' && (
-        <div className="card">
-          <EmptyState
-            icon="bolt"
-            title="No outbound data yet"
-            desc="Connect your CRM or outbound tool to start syncing prospects, sequences, and pipeline data."
-            action={{ label: 'Connect Integrations', onClick: () => addToast('Go to Integrations in the sidebar') }}
-          />
-        </div>
-      )}
+      {ob.loading ? (
+        <div className="card"><div style={{ padding: 40, textAlign: 'center', color: 'var(--ink-l)' }}>Loading…</div></div>
+      ) : (
+        <>
+          {tab === 'overview' && <Overview ob={ob} onGoto={setTab} onNewSequence={openBuilder} />}
 
-      {/* ── Prospects tab ────────────────────────── */}
-      {tab === 'prospects' && (
-        <div className="card">
-          <div className="card-header">
-            <div className="card-title">Prospects (0)</div>
-            <input
-              className="form-input"
-              style={{ width: 200, padding: '6px 10px', fontSize: 12 }}
-              placeholder="Search..."
-              value={search}
-              onChange={e => setSearch(e.target.value)}
+          {tab === 'prospects' && (
+            <ProspectsTab
+              prospects={ob.prospects}
+              sequences={ob.sequences}
+              busy={ob.busy}
+              onSync={ob.syncProspects}
+              onAddProspect={ob.addProspect}
+              onRemove={ob.removeProspect}
+              onEnrollGenerate={(sid, ids) => { ob.enrollAndGenerate(sid, ids); setTab('review') }}
             />
-          </div>
-          <EmptyState
-            icon="agents"
-            title="No prospects yet"
-            desc="Prospects will appear here once your CRM or outbound tool is connected."
-          />
-        </div>
-      )}
-
-      {/* ── Sequences tab ────────────────────────── */}
-      {tab === 'sequences' && (
-        <div className="card">
-          {building ? (
-            <>
-              <div className="card-header">
-                <div className="card-title">{editTarget ? 'Edit Sequence' : 'New Sequence'}</div>
-                <button className="seq-builder-back" onClick={cancelBuilder}>
-                  <Icon name="close" size={11} /> Cancel
-                </button>
-              </div>
-              <SequenceBuilder
-                onSave={handleSave}
-                onCancel={cancelBuilder}
-                initial={editTarget}
-              />
-            </>
-          ) : (
-            <>
-              <div className="card-header">
-                <div className="card-title">All Sequences ({sequences.length})</div>
-                <div className="card-action" onClick={openBuilder}>+ Create</div>
-              </div>
-
-              {sequences.length === 0 ? (
-                <EmptyState
-                  icon="mail"
-                  title="No sequences yet"
-                  desc="Build a multi-step outreach sequence to automate personalized touchpoints."
-                  action={{ label: '+ New Sequence', onClick: openBuilder }}
-                />
-              ) : (
-                <div className="seq-list">
-                  {sequences.map(seq => (
-                    <SequenceItem
-                      key={seq.id}
-                      seq={seq}
-                      onEdit={() => handleEdit(seq)}
-                      onDelete={() => handleDelete(seq.id)}
-                      onToggleActive={() => handleActivate(seq.id)}
-                    />
-                  ))}
-                </div>
-              )}
-            </>
           )}
-        </div>
-      )}
 
+          {tab === 'sequences' && (
+            <div className="card">
+              {building ? (
+                <>
+                  <div className="card-header">
+                    <div className="card-title">{editTarget ? 'Edit Sequence' : 'New Sequence'}</div>
+                    <button className="seq-builder-back" onClick={cancelBuilder}><Icon name="close" size={11} /> Cancel</button>
+                  </div>
+                  <SequenceBuilder onSave={handleSave} onCancel={cancelBuilder} initial={editTarget} />
+                </>
+              ) : (
+                <>
+                  <div className="card-header">
+                    <div className="card-title">All Sequences ({ob.sequences.length})</div>
+                    <div className="card-action" onClick={openBuilder}>+ Create</div>
+                  </div>
+                  {ob.sequences.length === 0 ? (
+                    <div style={{ textAlign: 'center', padding: '40px 16px', color: 'var(--ink-l)' }}>
+                      <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 8, color: 'var(--orange)' }}>
+                        <Icon name="mail" size={34} />
+                      </div>
+                      <div style={{ fontSize: 14, marginBottom: 4, color: 'var(--ink)' }}>No sequences yet</div>
+                      <div style={{ fontSize: 12, marginBottom: 14 }}>Build a multi-step outreach sequence to automate personalized touchpoints.</div>
+                      <button className="btn-sm btn-sm-primary" onClick={openBuilder}>+ New Sequence</button>
+                    </div>
+                  ) : (
+                    <div className="seq-list">
+                      {ob.sequences.map(seq => (
+                        <SequenceItem
+                          key={seq.id}
+                          seq={seq}
+                          onEdit={() => { setEditTarget(seq); setBuilding(true) }}
+                          onDelete={() => ob.removeSequence(seq.id)}
+                          onToggleActive={() => ob.toggleSequenceActive(seq.id)}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          )}
+
+          {tab === 'review' && (
+            <ReviewTab
+              messages={ob.messages}
+              busy={ob.busy}
+              mailboxConnected={ob.mailboxConnected}
+              dueFollowups={ob.dueFollowups}
+              upcomingFollowups={ob.upcomingFollowups}
+              onEdit={ob.editMessage}
+              onApprove={ob.approveMessage}
+              onDiscard={ob.discardMessage}
+              onSendApproved={ob.sendApproved}
+              onConnectMailbox={ob.connectMailbox}
+              onPrepareFollowups={ob.prepareDueFollowups}
+            />
+          )}
+        </>
+      )}
+    </div>
+  )
+}
+
+// ── Overview: getting-started checklist reflecting real state ──
+function Overview({ ob, onGoto, onNewSequence }: {
+  ob: ReturnType<typeof useOutbound>
+  onGoto: (t: string) => void
+  onNewSequence: () => void
+}) {
+  const hasProspects = ob.prospects.length > 0
+  const hasSequence  = ob.sequences.length > 0
+  const hasDrafts    = ob.messages.length > 0
+  const hasSent      = ob.stats.sent > 0
+
+  const steps = [
+    { done: hasProspects, title: 'Sync prospects',   desc: 'Pull contacts from your CRM (HubSpot / Apollo) or add them manually.', cta: 'Prospects', go: () => onGoto('prospects') },
+    { done: hasSequence,  title: 'Build a sequence',  desc: 'Create a multi-step email sequence the agent will personalize per prospect.', cta: 'New Sequence', go: onNewSequence },
+    { done: hasDrafts,    title: 'Generate & review', desc: 'Enroll prospects to generate AI-personalized drafts, then review them.', cta: 'Review', go: () => onGoto('review') },
+    { done: hasSent,      title: 'Send',              desc: 'Approve drafts and send through your connected mailbox.', cta: 'Review', go: () => onGoto('review') },
+  ]
+  const completed = steps.filter(s => s.done).length
+
+  return (
+    <div className="card">
+      <div className="card-header">
+        <div className="card-title">Getting started · {completed}/{steps.length} complete</div>
+      </div>
+      <div className="ob-checklist">
+        {steps.map((s, i) => (
+          <div key={i} className={`ob-check ${s.done ? 'ob-check-done' : ''}`}>
+            <div className="ob-check-icon">
+              {s.done ? <Icon name="checkCircle" size={20} /> : <span className="ob-check-num">{i + 1}</span>}
+            </div>
+            <div style={{ flex: 1 }}>
+              <div className="ob-check-title">{s.title}</div>
+              <div className="ob-check-desc">{s.desc}</div>
+            </div>
+            {!s.done && <button className="control-btn" onClick={s.go}>{s.cta}</button>}
+          </div>
+        ))}
+      </div>
     </div>
   )
 }
 
 // ── Sequence list item ────────────────────────────────────────
-
-interface SequenceItemProps {
+function SequenceItem({ seq, onEdit, onDelete, onToggleActive }: {
   seq: Sequence
   onEdit: () => void
   onDelete: () => void
   onToggleActive: () => void
-}
-
-function SequenceItem({ seq, onEdit, onDelete, onToggleActive }: SequenceItemProps) {
+}) {
   const created = new Date(seq.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
   const stepCounts = {
     email:    seq.steps.filter(s => s.type === 'email').length,
     linkedin: seq.steps.filter(s => s.type === 'linkedin').length,
     call:     seq.steps.filter(s => s.type === 'call').length,
   }
-
   return (
     <div className="seq-item">
       <div className="seq-item-main">
         <div className="seq-item-top">
           <span className="seq-item-name">{seq.name}</span>
-          <span className={`seq-status-badge ${seq.status === 'active' ? 'seq-status-active' : 'seq-status-draft'}`}>
-            {seq.status}
-          </span>
+          <span className={`seq-status-badge ${seq.status === 'active' ? 'seq-status-active' : 'seq-status-draft'}`}>{seq.status}</span>
         </div>
         <div className="seq-item-meta">
           <span>{seq.steps.length} {seq.steps.length === 1 ? 'step' : 'steps'}</span>
@@ -217,17 +230,10 @@ function SequenceItem({ seq, onEdit, onDelete, onToggleActive }: SequenceItemPro
           <span>Created {created}</span>
         </div>
       </div>
-
       <div className="seq-item-actions">
-        <button className="seq-item-btn" onClick={onToggleActive}>
-          {seq.status === 'active' ? 'Pause' : 'Activate'}
-        </button>
-        <button className="seq-item-btn" onClick={onEdit}>
-          <Icon name="edit" size={11} /> Edit
-        </button>
-        <button className="seq-item-btn seq-item-btn-danger" onClick={onDelete}>
-          <Icon name="trash" size={11} />
-        </button>
+        <button className="seq-item-btn" onClick={onToggleActive}>{seq.status === 'active' ? 'Pause' : 'Activate'}</button>
+        <button className="seq-item-btn" onClick={onEdit}><Icon name="edit" size={11} /> Edit</button>
+        <button className="seq-item-btn seq-item-btn-danger" onClick={onDelete}><Icon name="trash" size={11} /></button>
       </div>
     </div>
   )

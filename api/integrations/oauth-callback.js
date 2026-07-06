@@ -45,6 +45,12 @@ const TOKEN_CONFIGS = {
     clientSecretEnv: 'GOOGLE_CLIENT_SECRET',
     bodyFormat: 'form',
   },
+  gmail: {
+    tokenUrl: 'https://oauth2.googleapis.com/token',
+    clientIdEnv: 'GOOGLE_CLIENT_ID',
+    clientSecretEnv: 'GOOGLE_CLIENT_SECRET',
+    bodyFormat: 'form',
+  },
   slack: {
     tokenUrl: 'https://slack.com/api/oauth.v2.access',
     clientIdEnv: 'SLACK_CLIENT_ID',
