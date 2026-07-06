@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { supabase } from '../lib/supabase'
+import { supabase, supabaseConfigError, friendlyAuthError, isNetworkError } from '../lib/supabase'
 
 export default function SignIn({ initialError }: { initialError?: string | null }) {
   const [mode, setMode] = useState<'signin' | 'signup'>('signin')
@@ -16,12 +16,18 @@ export default function SignIn({ initialError }: { initialError?: string | null 
 
   const doSignIn = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (supabaseConfigError) { setError(supabaseConfigError); triggerShake(); return }
     if (!email.includes('@')) { setError('Please enter a valid email.'); triggerShake(); return }
     if (pw.length < 6) { setError('Password must be at least 6 characters.'); triggerShake(); return }
     setLoading(true); setError('')
-    const { error: authError } = await supabase.auth.signInWithPassword({ email, password: pw })
-    if (authError) { setError(authError.message); triggerShake() }
-    setLoading(false)
+    try {
+      const { error: authError } = await supabase.auth.signInWithPassword({ email, password: pw })
+      if (authError) { setError(friendlyAuthError(authError.message)); triggerShake() }
+    } catch (err) {
+      setError(friendlyAuthError(err instanceof Error ? err.message : undefined)); triggerShake()
+    } finally {
+      setLoading(false)
+    }
   }
 
   const doSignUp = async (e: React.FormEvent) => {
@@ -29,21 +35,26 @@ export default function SignIn({ initialError }: { initialError?: string | null 
     if (!name.trim()) { setError('Please enter your name.'); triggerShake(); return }
     if (!email.includes('@')) { setError('Please enter a valid email.'); triggerShake(); return }
     if (pw.length < 6) { setError('Password must be at least 6 characters.'); triggerShake(); return }
+    if (supabaseConfigError) { setError(supabaseConfigError); triggerShake(); return }
     setLoading(true); setError(''); setSuccess('')
 
     const initials = name.trim().split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()
-    const { data, error: authError } = await supabase.auth.signUp({
-      email,
-      password: pw,
-      options: { data: { name: name.trim(), initials, role: 'Strategist', org: org.trim() || 'My Company' } }
-    })
-
-    if (authError) {
-      setError(authError.message); triggerShake()
-    } else if (data.user && !data.session) {
-      setSuccess('Check your email to confirm your account, then sign in.')
+    try {
+      const { data, error: authError } = await supabase.auth.signUp({
+        email,
+        password: pw,
+        options: { data: { name: name.trim(), initials, role: 'Strategist', org: org.trim() || 'My Company' } }
+      })
+      if (authError) {
+        setError(friendlyAuthError(authError.message)); triggerShake()
+      } else if (data.user && !data.session) {
+        setSuccess('Check your email to confirm your account, then sign in.')
+      }
+    } catch (err) {
+      setError(friendlyAuthError(err instanceof Error ? err.message : undefined)); triggerShake()
+    } finally {
+      setLoading(false)
     }
-    setLoading(false)
   }
 
   const doDemo = async () => {
@@ -54,16 +65,24 @@ export default function SignIn({ initialError }: { initialError?: string | null 
       triggerShake()
       return
     }
+    if (supabaseConfigError) { setError(supabaseConfigError); triggerShake(); return }
     setLoading(true); setError('')
-    const { error: authError } = await supabase.auth.signInWithPassword({
-      email: demoEmail,
-      password: demoPw,
-    })
-    if (authError) {
-      setError('Demo account unavailable — please sign up for free.')
-      triggerShake()
+    try {
+      const { error: authError } = await supabase.auth.signInWithPassword({
+        email: demoEmail,
+        password: demoPw,
+      })
+      if (authError) {
+        setError(isNetworkError(authError.message)
+          ? friendlyAuthError(authError.message)
+          : 'Demo account unavailable — please sign up for free.')
+        triggerShake()
+      }
+    } catch (err) {
+      setError(friendlyAuthError(err instanceof Error ? err.message : undefined)); triggerShake()
+    } finally {
+      setLoading(false)
     }
-    setLoading(false)
   }
 
   return (
@@ -89,6 +108,12 @@ export default function SignIn({ initialError }: { initialError?: string | null 
 
       <div className="signin-right">
         <div className={`signin-form-wrap ${shake ? 'form-shake' : ''}`} style={{ animation: 'fadeUp 0.5s ease forwards', animationDelay: '0.15s', opacity: 0 }}>
+          {supabaseConfigError && (
+            <div style={{ background: 'rgba(231,76,60,0.10)', border: '1px solid rgba(231,76,60,0.45)', borderRadius: 8, padding: '12px 14px', marginBottom: 18, color: '#c0392b', fontSize: 12, lineHeight: 1.5 }}>
+              <strong>Backend not configured.</strong> {supabaseConfigError}
+            </div>
+          )}
+
           <div style={{ display: 'flex', gap: 8, marginBottom: 24 }}>
             {(['signin', 'signup'] as const).map(m => (
               <button

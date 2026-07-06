@@ -38,6 +38,24 @@ simulated — so the product is always demoable.
    (`ANTHROPIC_API_KEY` for live AI, `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`
    for Gmail sending).
 
+## Troubleshooting
+
+**"Failed to fetch" on sign-in / slow to load** — the browser can't reach the
+Supabase backend. It's almost always one of:
+
+1. **Supabase env vars not set in Vercel.** In Vercel → Project → Settings →
+   Environment Variables, set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`
+   (Production + Preview), then **redeploy** — Vite bakes these at build time, so
+   a redeploy is required after changing them. The sign-in screen now shows a
+   "Backend not configured" banner when these are missing or still placeholders.
+2. **Supabase project is paused.** Free-tier projects pause after ~7 days idle.
+   Open the Supabase dashboard and click **Restore / Resume**.
+3. **Wrong URL/key.** Copy them from Supabase → Project Settings → API.
+
+After the backend is reachable, run `supabase/schema.sql` then
+`supabase/outbound-schema.sql` in the SQL editor so sign-up and the app tables
+exist.
+
 ## Stack
 
 - **React 18** + **TypeScript**
