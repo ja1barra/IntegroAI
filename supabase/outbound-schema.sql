@@ -131,7 +131,7 @@ create table if not exists public.messages (
   channel       text not null default 'email',   -- email | linkedin | call
   subject       text not null default '',
   body          text not null default '',
-  status        text not null default 'draft',   -- draft | approved | sending | sent | failed | replied
+  status        text not null default 'draft',   -- scheduled | draft | approved | sending | sent | failed | replied
   generated_by  text not null default 'ai',       -- ai | manual
   mailbox       text,                              -- provider used to send (gmail, outreach, ...)
   provider_msg_id text,                            -- id returned by the sending provider
@@ -147,8 +147,13 @@ drop policy if exists "own messages" on public.messages;
 create policy "own messages" on public.messages for all
   using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
+-- scheduled_at drives multi-step follow-ups: the next step of a sequence is
+-- queued with a future scheduled_at and surfaces as "due" once it passes.
+alter table public.messages add column if not exists scheduled_at timestamptz;
+
 create index if not exists messages_user_status_idx on public.messages (user_id, status);
 create index if not exists messages_prospect_idx    on public.messages (prospect_id);
+create index if not exists messages_scheduled_idx   on public.messages (user_id, status, scheduled_at);
 
 drop trigger if exists messages_updated_at on public.messages;
 create trigger messages_updated_at before update on public.messages

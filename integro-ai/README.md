@@ -19,6 +19,10 @@ The working pipeline:
 4. **Review & approve** — edit any draft, then approve.
 5. **Send** — approved emails send through your connected Gmail mailbox
    (`/api/agent/send`).
+6. **Follow up** — when a step is sent, the next email step of the sequence is
+   scheduled for its delay. Once due, "Prepare follow-ups" personalizes the next
+   touch and drops it back into the review queue (skipping anyone who replied).
+   Upcoming touches are listed in the Review tab.
 
 Every step degrades gracefully: with no `ANTHROPIC_API_KEY` it falls back to
 deterministic mail-merge personalization, and with no mailbox connected sends are

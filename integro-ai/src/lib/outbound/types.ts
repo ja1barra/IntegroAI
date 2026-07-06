@@ -31,7 +31,7 @@ export interface ProspectInput {
 }
 
 export type MessageStatus =
-  | 'draft' | 'approved' | 'sending' | 'sent' | 'failed' | 'replied'
+  | 'scheduled' | 'draft' | 'approved' | 'sending' | 'sent' | 'failed' | 'replied'
 
 export interface Message {
   id: string
@@ -46,6 +46,7 @@ export interface Message {
   generatedBy: 'ai' | 'manual'
   mailbox: string | null
   sentAt: string | null
+  scheduledAt: string | null
   error: string | null
   createdAt: string
   prospect?: Prospect        // joined for the review queue

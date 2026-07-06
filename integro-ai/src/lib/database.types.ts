@@ -155,6 +155,7 @@ export interface Database {
           provider_msg_id: string | null
           error: string | null
           sent_at: string | null
+          scheduled_at: string | null
           created_at: string
           updated_at: string
         }
@@ -174,6 +175,7 @@ export interface Database {
           provider_msg_id?: string | null
           error?: string | null
           sent_at?: string | null
+          scheduled_at?: string | null
         }
         Update: Partial<Database['public']['Tables']['messages']['Insert']>
       }

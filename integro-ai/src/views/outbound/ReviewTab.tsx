@@ -7,21 +7,54 @@ interface Props {
   messages: Message[]
   busy: string | null
   mailboxConnected: boolean
+  dueFollowups: Message[]
+  upcomingFollowups: Message[]
   onEdit: (id: string, patch: { subject?: string; body?: string }) => void
   onApprove: (id: string) => void
   onDiscard: (id: string) => void
   onSendApproved: () => void
   onConnectMailbox: () => void
+  onPrepareFollowups: () => void
 }
 
-export default function ReviewTab({ messages, busy, mailboxConnected, onEdit, onApprove, onDiscard, onSendApproved, onConnectMailbox }: Props) {
+function fmtDate(iso: string): string {
+  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+}
+
+export default function ReviewTab({ messages, busy, mailboxConnected, dueFollowups, upcomingFollowups, onEdit, onApprove, onDiscard, onSendApproved, onConnectMailbox, onPrepareFollowups }: Props) {
   const drafts   = messages.filter(m => m.status === 'draft')
   const approved = messages.filter(m => m.status === 'approved')
   const sent     = messages.filter(m => m.status === 'sent')
   const failed   = messages.filter(m => m.status === 'failed')
   const sending  = busy === 'send'
+  const preparing = busy === 'generate'
 
   const queue = [...drafts, ...approved]
+
+  const followupBanner = dueFollowups.length > 0 && (
+    <div className="ob-followup-banner">
+      <Icon name="bolt" size={14} />
+      <span><strong>{dueFollowups.length}</strong> follow-up{dueFollowups.length === 1 ? '' : 's'} due — the agent will personalize the next sequence step for review.</span>
+      <div style={{ flex: 1 }} />
+      <button className="btn-sm btn-sm-primary" onClick={onPrepareFollowups} disabled={preparing}>
+        {preparing ? 'Preparing…' : 'Prepare follow-ups'}
+      </button>
+    </div>
+  )
+
+  const upcomingSection = upcomingFollowups.length > 0 && (
+    <details className="ob-sent" style={{ marginTop: 14 }}>
+      <summary>Upcoming follow-ups ({upcomingFollowups.length})</summary>
+      {upcomingFollowups.map(m => (
+        <div key={m.id} className="ob-sent-row" style={{ color: 'var(--ink-l)' }}>
+          <Icon name="mail" size={12} />
+          <span className="ob-name">{m.prospect ? `${m.prospect.firstName} ${m.prospect.lastName}` : ''}</span>
+          <span className="ob-sub">{m.prospect?.company}</span>
+          <span className="ob-tag">{m.scheduledAt ? fmtDate(m.scheduledAt) : ''}</span>
+        </div>
+      ))}
+    </details>
+  )
 
   if (messages.length === 0) {
     return (
@@ -35,8 +68,25 @@ export default function ReviewTab({ messages, busy, mailboxConnected, onEdit, on
     )
   }
 
+  if (queue.length === 0) {
+    return (
+      <div className="card">
+        {followupBanner}
+        <EmptyState
+          icon="checkCircle"
+          title="Review queue clear"
+          desc={upcomingFollowups.length > 0
+            ? 'No drafts to review right now. Upcoming follow-ups are scheduled below.'
+            : 'All caught up — no drafts awaiting review.'}
+        />
+        {upcomingSection}
+      </div>
+    )
+  }
+
   return (
     <div className="card">
+      {followupBanner}
       <div className="card-header">
         <div className="card-title">
           Review Queue — {drafts.length} draft{drafts.length === 1 ? '' : 's'}, {approved.length} approved
@@ -71,6 +121,8 @@ export default function ReviewTab({ messages, busy, mailboxConnected, onEdit, on
           <ReviewCard key={m.id} msg={m} onEdit={onEdit} onApprove={onApprove} onDiscard={onDiscard} />
         ))}
       </div>
+
+      {upcomingSection}
 
       {sent.length > 0 && (
         <details className="ob-sent">

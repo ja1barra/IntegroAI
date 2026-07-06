@@ -32,7 +32,7 @@ export default function OutboundView({ active, agentStates, toggleAgent, addToas
     setEditTarget(undefined)
   }
 
-  const draftCount = ob.messages.filter(m => m.status === 'draft' || m.status === 'approved').length
+  const draftCount = ob.messages.filter(m => m.status === 'draft' || m.status === 'approved').length + ob.dueFollowups.length
 
   return (
     <div className={`view ${active ? 'active' : ''}`}>
@@ -144,11 +144,14 @@ export default function OutboundView({ active, agentStates, toggleAgent, addToas
               messages={ob.messages}
               busy={ob.busy}
               mailboxConnected={ob.mailboxConnected}
+              dueFollowups={ob.dueFollowups}
+              upcomingFollowups={ob.upcomingFollowups}
               onEdit={ob.editMessage}
               onApprove={ob.approveMessage}
               onDiscard={ob.discardMessage}
               onSendApproved={ob.sendApproved}
               onConnectMailbox={ob.connectMailbox}
+              onPrepareFollowups={ob.prepareDueFollowups}
             />
           )}
         </>

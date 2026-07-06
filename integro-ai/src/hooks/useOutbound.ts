@@ -158,6 +158,32 @@ export function useOutbound(sender: Sender, notify: Notify) {
     catch (err) { notify(err instanceof Error ? err.message : 'Discard failed', 'error'); reload() }
   }, [notify, reload])
 
+  // After a step is sent, queue the next email step of the sequence (if any)
+  // as a scheduled follow-up, and advance the enrollment.
+  const scheduleNextStep = useCallback(async (msg: Message) => {
+    if (!msg.enrollmentId || !msg.sequenceId || !msg.prospectId) return
+    const seq = sequences.find(s => s.id === msg.sequenceId)
+    if (!seq) return
+    const emailSteps = seq.steps.filter(s => s.type === 'email')
+    const idx = msg.stepId ? emailSteps.findIndex(s => s.id === msg.stepId) : 0
+    const curIdx = idx < 0 ? 0 : idx
+    const next = emailSteps[curIdx + 1]
+    if (!next) {
+      await store.advanceEnrollment(msg.enrollmentId, curIdx + 1, 'completed')
+      return
+    }
+    const delayDays = Math.max(1, next.delay)
+    const scheduledAt = new Date(Date.now() + delayDays * 86_400_000).toISOString()
+    await store.scheduleMessage({
+      prospectId: msg.prospectId,
+      sequenceId: msg.sequenceId,
+      enrollmentId: msg.enrollmentId,
+      stepId: next.id,
+      scheduledAt,
+    })
+    await store.advanceEnrollment(msg.enrollmentId, curIdx + 1)
+  }, [sequences])
+
   // Send one message via the connected mailbox.
   const sendOne = useCallback(async (id: string, mailbox: Awaited<ReturnType<typeof getMailbox>>) => {
     const msg = messages.find(m => m.id === id)
@@ -167,12 +193,13 @@ export function useOutbound(sender: Sender, notify: Notify) {
     if (res.ok) {
       await store.updateMessage(id, { status: 'sent', sentAt: new Date().toISOString(), mailbox: mailbox?.provider ?? 'demo', providerMsgId: res.id, error: null })
       if (msg.prospectId) await store.setProspectStatus(msg.prospectId, 'contacted')
+      await scheduleNextStep(msg)
       return true
     } else {
       await store.updateMessage(id, { status: 'failed', error: res.error ?? 'Send failed' })
       return false
     }
-  }, [messages])
+  }, [messages, scheduleNextStep])
 
   // Send all approved messages (auto-send / bulk send).
   const sendApproved = useCallback(async () => {
@@ -201,6 +228,37 @@ export function useOutbound(sender: Sender, notify: Notify) {
       setBusy(null)
     }
   }, [messages, sendOne, notify, reload])
+
+  // Generate drafts for follow-up steps whose scheduled time has arrived,
+  // moving them into the review queue. Skips prospects who already replied.
+  const prepareDueFollowups = useCallback(async () => {
+    const now = Date.now()
+    const due = messages.filter(m =>
+      m.status === 'scheduled' && m.scheduledAt && new Date(m.scheduledAt).getTime() <= now &&
+      m.prospect && !['replied', 'unsubscribed', 'bounced'].includes(m.prospect.status),
+    )
+    if (due.length === 0) { notify('No follow-ups are due right now'); return }
+    setBusy('generate')
+    const run = await store.startRun('generate', { kind: 'followup', count: due.length })
+    try {
+      for (const m of due) {
+        const seq = sequences.find(s => s.id === m.sequenceId)
+        const step = seq?.steps.find(s => s.id === m.stepId) ?? seq?.steps.find(s => s.type === 'email')
+        if (!step || !m.prospect) continue
+        const { drafts } = await generateDrafts([m.prospect], step, sender)
+        const d = drafts[0]
+        if (d) await store.updateMessage(m.id, { subject: d.subject, body: d.body, status: 'draft' })
+      }
+      await store.finishRun(run, 'completed', due.length)
+      await reload()
+      notify(`Prepared ${due.length} follow-up${due.length === 1 ? '' : 's'} for review`)
+    } catch (err) {
+      await store.finishRun(run, 'failed', 0, err instanceof Error ? err.message : undefined)
+      notify(err instanceof Error ? err.message : 'Could not prepare follow-ups', 'error')
+    } finally {
+      setBusy(null)
+    }
+  }, [messages, sequences, sender, notify, reload])
 
   const connectMailbox = useCallback(async () => {
     setBusy('mailbox')
@@ -232,13 +290,25 @@ export function useOutbound(sender: Sender, notify: Notify) {
 
   const mailboxConnected = !!(mailbox && mailbox.token && !mailbox.token.includes('demo'))
 
+  const { dueFollowups, upcomingFollowups } = useMemo(() => {
+    const now = Date.now()
+    const scheduled = messages.filter(m => m.status === 'scheduled' && m.scheduledAt)
+    return {
+      dueFollowups: scheduled.filter(m => new Date(m.scheduledAt!).getTime() <= now),
+      upcomingFollowups: scheduled
+        .filter(m => new Date(m.scheduledAt!).getTime() > now)
+        .sort((a, b) => new Date(a.scheduledAt!).getTime() - new Date(b.scheduledAt!).getTime()),
+    }
+  }, [messages])
+
   return {
     prospects, sequences, enrollments, messages, loading, busy, stats,
     mailbox, mailboxConnected,
+    dueFollowups, upcomingFollowups,
     reload,
     syncProspects, addProspect, removeProspect,
     saveSequence, removeSequence, toggleSequenceActive,
-    enrollAndGenerate,
+    enrollAndGenerate, prepareDueFollowups,
     editMessage, approveMessage, discardMessage, sendApproved, connectMailbox,
   }
 }

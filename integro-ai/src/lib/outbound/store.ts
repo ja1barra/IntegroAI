@@ -214,6 +214,7 @@ function mapMessage(r: any): Message {
     generatedBy: r.generated_by ?? 'ai',
     mailbox: r.mailbox ?? null,
     sentAt: r.sent_at ?? null,
+    scheduledAt: r.scheduled_at ?? null,
     error: r.error ?? null,
     createdAt: r.created_at,
     prospect: r.prospects ? mapProspect(r.prospects) : undefined,
@@ -281,6 +282,38 @@ export async function updateMessage(
 
 export async function deleteMessage(id: string): Promise<void> {
   const { error } = await supabase.from('messages').delete().eq('id', id)
+  if (error) throw error
+}
+
+// Queue the next step of a sequence as a scheduled follow-up.
+export async function scheduleMessage(m: {
+  prospectId: string
+  sequenceId: string
+  enrollmentId: string
+  stepId: string | null
+  scheduledAt: string
+}): Promise<void> {
+  const uid = await userId()
+  const { error } = await supabase.from('messages').insert({
+    user_id: uid,
+    prospect_id: m.prospectId,
+    sequence_id: m.sequenceId,
+    enrollment_id: m.enrollmentId,
+    step_id: m.stepId,
+    channel: 'email',
+    subject: '',
+    body: '',
+    status: 'scheduled',
+    generated_by: 'ai',
+    scheduled_at: m.scheduledAt,
+  })
+  if (error) throw error
+}
+
+export async function advanceEnrollment(id: string, currentStep: number, status?: string): Promise<void> {
+  const row: any = { current_step: currentStep }
+  if (status) row.status = status
+  const { error } = await supabase.from('enrollments').update(row).eq('id', id)
   if (error) throw error
 }
 
