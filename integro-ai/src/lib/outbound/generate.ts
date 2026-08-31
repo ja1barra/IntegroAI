@@ -5,6 +5,7 @@
 // product is always demoable.
 
 import type { Prospect, SequenceStep } from './types'
+import { supabase } from '../supabase'
 
 export interface Draft {
   prospectId: string
@@ -46,9 +47,13 @@ export async function generateDrafts(
   if (prospects.length === 0) return { drafts: [], usedAI: false }
 
   try {
+    const { data: { session } } = await supabase.auth.getSession()
     const r = await fetch(ENDPOINT, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+      },
       body: JSON.stringify({
         sender,
         step: { subject: step.subject, body: step.body, type: step.type },

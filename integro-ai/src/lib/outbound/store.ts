@@ -183,6 +183,11 @@ export async function listEnrollments(): Promise<Enrollment[]> {
 }
 
 // Enroll prospects into a sequence (idempotent on sequence+prospect).
+// Callers rely on every requested prospectId coming back with an
+// enrollment id (e.g. to link a freshly generated message to its
+// enrollment for follow-up scheduling) — including ones that were already
+// enrolled, since `ignoreDuplicates` means the upsert itself won't return
+// rows that hit the (sequence_id, prospect_id) conflict.
 export async function enrollProspects(sequenceId: string, prospectIds: string[]): Promise<Enrollment[]> {
   if (prospectIds.length === 0) return []
   const uid = await userId()
@@ -195,7 +200,20 @@ export async function enrollProspects(sequenceId: string, prospectIds: string[])
     .select('*')
   if (error) throw error
   await supabase.from('prospects').update({ status: 'enrolled' }).in('id', prospectIds)
-  return (data ?? []).map(mapEnrollment)
+
+  const found = (data ?? []).map(mapEnrollment)
+  const missingIds = prospectIds.filter(pid => !found.some(e => e.prospectId === pid))
+  if (missingIds.length === 0) return found
+
+  // Some prospects were already enrolled (skipped by ignoreDuplicates) —
+  // fetch their existing enrollment rows so the caller still gets an id.
+  const { data: existing, error: fetchErr } = await supabase
+    .from('enrollments')
+    .select('*')
+    .eq('sequence_id', sequenceId)
+    .in('prospect_id', missingIds)
+  if (fetchErr) throw fetchErr
+  return [...found, ...(existing ?? []).map(mapEnrollment)]
 }
 
 // ── Messages ─────────────────────────────────────────────────

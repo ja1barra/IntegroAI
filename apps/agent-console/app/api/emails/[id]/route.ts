@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServiceClient } from '@/lib/supabase'
+import { unauthorized } from '@/lib/authorize'
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
+  const authError = unauthorized(req)
+  if (authError) return authError
+
   let body: { status?: string }
   try {
     body = await req.json()

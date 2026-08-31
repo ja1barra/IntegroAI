@@ -505,7 +505,7 @@ export default function DetailPanel({ integration, onClose, onDisconnect, onConf
                             </td>
                             <td>
                               <span className="stage-badge stage-prospect" style={{ fontSize: 9 }}>
-                                {d.properties.dealstage.replace(/([A-Z])/g, ' $1').toLowerCase()}
+                                {d.properties.dealstage ? d.properties.dealstage.replace(/([A-Z])/g, ' $1').toLowerCase() : '--'}
                               </span>
                             </td>
                             <td style={{ fontFamily: "'DM Mono',monospace", fontSize: 11 }}>{d.properties.closedate ? d.properties.closedate.slice(0, 10) : '--'}</td>

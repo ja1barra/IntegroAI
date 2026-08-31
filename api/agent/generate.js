@@ -62,6 +62,25 @@ function parseResult(text, fallbackCompany) {
   return { subject: `Quick idea for ${fallbackCompany || 'your team'}`, body: text.trim() }
 }
 
+// Require a valid signed-in Supabase user so this endpoint can't be used by
+// anyone who finds the URL to spend the shared ANTHROPIC_API_KEY for free.
+async function requireUser(req) {
+  const auth = req.headers.authorization || ''
+  const token = auth.startsWith('Bearer ') ? auth.slice(7) : null
+  if (!token) return false
+  const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL
+  const anonKey = process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY
+  if (!supabaseUrl || !anonKey) return false
+  try {
+    const r = await fetch(`${supabaseUrl.replace(/\/$/, '')}/auth/v1/user`, {
+      headers: { Authorization: `Bearer ${token}`, apikey: anonKey },
+    })
+    return r.ok
+  } catch {
+    return false
+  }
+}
+
 async function generateOne(apiKey, sender, step, p) {
   const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
@@ -91,6 +110,10 @@ export default async function handler(req, res) {
   Object.entries(CORS).forEach(([k, v]) => res.setHeader(k, v))
   if (req.method === 'OPTIONS') return res.status(200).end()
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
+
+  if (!(await requireUser(req))) {
+    return res.status(401).json({ error: 'Sign in required' })
+  }
 
   const apiKey = process.env.ANTHROPIC_API_KEY
   if (!apiKey) {

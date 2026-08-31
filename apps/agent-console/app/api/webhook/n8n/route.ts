@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { unauthorized } from '@/lib/authorize'
 
 export async function POST(req: NextRequest) {
+  const authError = unauthorized(req)
+  if (authError) return authError
+
   let body: unknown
   try {
     body = await req.json()
@@ -18,7 +22,10 @@ export async function POST(req: NextRequest) {
   const origin = req.nextUrl.origin
   const res = await fetch(`${origin}/api/agent/run`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${process.env.AGENT_CONSOLE_API_KEY}`,
+    },
     body: JSON.stringify({ prospects }),
   })
 

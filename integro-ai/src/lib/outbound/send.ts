@@ -21,7 +21,11 @@ export interface SendResult {
 }
 
 const ENDPOINT = '/api/agent/send'
-const MAILBOX_PROVIDERS = ['gmail', 'google', 'outreach']
+// Only providers /api/agent/send actually knows how to send through — keep
+// this in sync with the `provider` check in api/agent/send.js. 'outreach'
+// is a real, connectable integration but is not a supported send path, so
+// it must not be picked as the sending mailbox.
+const MAILBOX_PROVIDERS = ['gmail', 'google']
 
 // OAuth credentials are stored as a JSON token bundle in key_encrypted.
 // Extract the usable bearer token (or fall back to a raw string).

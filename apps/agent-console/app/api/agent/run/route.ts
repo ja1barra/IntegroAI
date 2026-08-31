@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
 import { getServiceClient } from '@/lib/supabase'
+import { unauthorized } from '@/lib/authorize'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
@@ -38,6 +39,9 @@ Output only the email body text.`,
 }
 
 export async function POST(req: NextRequest) {
+  const authError = unauthorized(req)
+  if (authError) return authError
+
   let body: { prospects?: Prospect[] }
   try {
     body = await req.json()

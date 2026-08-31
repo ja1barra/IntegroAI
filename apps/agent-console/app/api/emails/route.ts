@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServiceClient } from '@/lib/supabase'
+import { unauthorized } from '@/lib/authorize'
 
 export async function GET(req: NextRequest) {
+  const authError = unauthorized(req)
+  if (authError) return authError
+
   const status = req.nextUrl.searchParams.get('status')
   const db = getServiceClient()
 
