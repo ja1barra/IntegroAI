@@ -27,9 +27,9 @@ interface ConnectConfig {
 
 const CONFIGS: Partial<Record<Provider, ConnectConfig>> = {
   hubspot: {
-    label: 'Private App Token',
+    label: 'API Token',
     placeholder: 'pat-na1-xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx',
-    instructions: 'In HubSpot, go to Settings → Integrations → Private Apps. Create a new private app, grant the required scopes, and copy the access token.',
+    instructions: 'In HubSpot, go to Settings → Integrations → Private Apps. HubSpot now recommends Service Keys over legacy private apps for single-account access — either works here. Grant the required scopes and copy the resulting access token.',
     scopes: ['crm.objects.contacts.read/write', 'crm.objects.deals.read/write', 'timeline'],
     // HubSpot's private-apps settings page is portal-scoped
     // (app.hubspot.com/private-apps/{hubId}) — we don't know the user's hub ID
