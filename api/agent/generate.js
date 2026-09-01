@@ -81,6 +81,14 @@ async function requireUser(req) {
   }
 }
 
+// Sonnet 5 runs adaptive thinking by default — the response's `content`
+// array leads with a `thinking` block (no `.text` field), not the text
+// block, so it must be located by type rather than assumed to be index 0.
+function extractText(data) {
+  const block = Array.isArray(data.content) ? data.content.find(b => b && b.type === 'text') : null
+  return block && typeof block.text === 'string' ? block.text : ''
+}
+
 async function generateOne(apiKey, sender, step, p) {
   const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
@@ -91,7 +99,8 @@ async function generateOne(apiKey, sender, step, p) {
     },
     body: JSON.stringify({
       model: MODEL,
-      max_tokens: 700,
+      max_tokens: 1200,
+      output_config: { effort: 'low' },
       system: 'You are an expert B2B SDR who writes concise, highly personalized cold emails that get replies. You always respond with valid JSON only.',
       messages: [{ role: 'user', content: buildPrompt(sender, step, p) }],
     }),
@@ -101,7 +110,7 @@ async function generateOne(apiKey, sender, step, p) {
     throw new Error(`Anthropic API ${res.status}: ${errText.slice(0, 200)}`)
   }
   const data = await res.json()
-  const text = Array.isArray(data.content) && data.content[0] && data.content[0].text ? data.content[0].text : ''
+  const text = extractText(data)
   const parsed = parseResult(text, p.company)
   return { id: p.id, subject: parsed.subject, body: parsed.body }
 }

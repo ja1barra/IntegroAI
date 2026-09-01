@@ -72,6 +72,14 @@ Respond with ONLY a JSON array, no markdown, no commentary, in exactly this shap
 The array must have exactly ${stepCount} items, in send order.`
 }
 
+// Sonnet 5 runs adaptive thinking by default — the response's `content`
+// array leads with a `thinking` block (no `.text` field), not the text
+// block, so it must be located by type rather than assumed to be index 0.
+function extractText(data) {
+  const block = Array.isArray(data.content) ? data.content.find(b => b && b.type === 'text') : null
+  return block && typeof block.text === 'string' ? block.text : ''
+}
+
 function parseSteps(text, stepCount) {
   if (!text) return null
   let t = text.trim().replace(/^```(?:json)?/i, '').replace(/```$/, '').trim()
@@ -120,7 +128,8 @@ export default async function handler(req, res) {
       },
       body: JSON.stringify({
         model: MODEL,
-        max_tokens: 2000,
+        max_tokens: 4096,
+        output_config: { effort: 'low' },
         system: 'You are an expert B2B SDR who designs high-converting cold outbound sequences. You always respond with valid JSON only.',
         messages: [{ role: 'user', content: buildPrompt(sender, brief.trim(), count) }],
       }),
@@ -130,7 +139,7 @@ export default async function handler(req, res) {
       throw new Error(`Anthropic API ${aiRes.status}: ${errText.slice(0, 200)}`)
     }
     const data = await aiRes.json()
-    const text = Array.isArray(data.content) && data.content[0] && data.content[0].text ? data.content[0].text : ''
+    const text = extractText(data)
     const steps = parseSteps(text, count)
     if (!steps || steps.length === 0) {
       return res.status(502).json({ error: 'Could not parse a sequence from the AI response — try again' })
