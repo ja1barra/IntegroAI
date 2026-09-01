@@ -301,6 +301,12 @@ const iconPaths: Record<string, React.FC<IconProps>> = {
       <line x1="4" y1="22" x2="4" y2="15"/>
     </svg>
   ),
+  sparkles: ({ size = 13, ...p }) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" {...p}>
+      <path d="M12 3l1.6 4.4L18 9l-4.4 1.6L12 15l-1.6-4.4L6 9l4.4-1.6z"/>
+      <path d="M19 15l0.8 2.2L22 18l-2.2 0.8L19 21l-0.8-2.2L16 18l2.2-0.8z"/>
+    </svg>
+  ),
 }
 
 export type IconName = keyof typeof iconPaths

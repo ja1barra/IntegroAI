@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
 import { Icon } from '../../components/ui/Icon'
+import { generateSequenceTemplate, type Sender } from '../../lib/outbound/generate'
 import type { StepType, SequenceStep, Sequence } from '../../lib/outbound/types'
 
 export type { StepType, SequenceStep, Sequence }
@@ -8,6 +9,7 @@ interface Props {
   onSave: (seq: Sequence) => void
   onCancel: () => void
   initial?: Sequence
+  sender: Sender
 }
 
 const TYPES: { v: StepType; label: string }[] = [
@@ -26,7 +28,7 @@ function absDay(steps: SequenceStep[], idx: number): number {
   return steps.slice(0, idx + 1).reduce((sum, s) => sum + s.delay, 0)
 }
 
-export default function SequenceBuilder({ onSave, onCancel, initial }: Props) {
+export default function SequenceBuilder({ onSave, onCancel, initial, sender }: Props) {
   const [name,  setName]  = useState(initial?.name  ?? '')
   const [steps, setSteps] = useState<SequenceStep[]>(initial?.steps ?? [makeStep(true)])
 
@@ -36,6 +38,31 @@ export default function SequenceBuilder({ onSave, onCancel, initial }: Props) {
     setSteps(p => p.map(s => s.id === id ? { ...s, ...patch } : s))
 
   const canSave = name.trim().length > 0 && steps.every(s => s.body.trim().length > 0)
+
+  // ── AI generation ────────────────────────────
+  const [aiOpen,  setAiOpen]  = useState(false)
+  const [brief,   setBrief]   = useState('')
+  const [count,   setCount]   = useState(3)
+  const [aiBusy,  setAiBusy]  = useState(false)
+  const [aiError, setAiError] = useState<string | null>(null)
+
+  const hasContent = steps.some(s => s.subject.trim() || s.body.trim())
+
+  async function handleGenerate() {
+    if (!brief.trim() || aiBusy) return
+    setAiBusy(true)
+    setAiError(null)
+    const res = await generateSequenceTemplate(brief.trim(), count, sender)
+    setAiBusy(false)
+    if (!res.ok || !res.steps) {
+      setAiError(res.error ?? 'Generation failed')
+      return
+    }
+    setSteps(res.steps.map(s => ({ id: uid(), type: s.type, delay: s.delay, subject: s.subject, body: s.body })))
+    if (!name.trim()) setName(brief.trim().slice(0, 60))
+    setAiOpen(false)
+    setBrief('')
+  }
 
   function handleSave() {
     if (!canSave) return
@@ -53,15 +80,80 @@ export default function SequenceBuilder({ onSave, onCancel, initial }: Props) {
 
       {/* ── Name ────────────────────────────────── */}
       <div className="seq-builder-name">
-        <label className="form-label">Sequence Name</label>
-        <input
-          className="form-input seq-name-input"
-          placeholder="e.g. Cold Outreach — SaaS Founders"
-          value={name}
-          onChange={e => setName(e.target.value)}
-          autoFocus
-        />
+        <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
+          <div style={{ flex: 1, minWidth: 220 }}>
+            <label className="form-label">Sequence Name</label>
+            <input
+              className="form-input seq-name-input"
+              placeholder="e.g. Cold Outreach — SaaS Founders"
+              value={name}
+              onChange={e => setName(e.target.value)}
+              autoFocus
+            />
+          </div>
+          {!aiOpen && (
+            <button className="seq-ai-trigger" onClick={() => setAiOpen(true)}>
+              <Icon name="sparkles" size={12} /> Generate with AI
+            </button>
+          )}
+        </div>
       </div>
+
+      {/* ── AI generation panel ──────────────────── */}
+      {aiOpen && (
+        <div className="seq-ai-panel">
+          <div className="seq-ai-panel-header">
+            <Icon name="sparkles" size={13} />
+            <span>Draft this sequence with AI</span>
+            <button className="seq-ai-panel-close" onClick={() => { setAiOpen(false); setAiError(null) }}>
+              <Icon name="close" size={10} />
+            </button>
+          </div>
+
+          <div className="seq-field">
+            <label className="form-label">Who are you targeting, and what's the angle?</label>
+            <textarea
+              className="seq-body-input"
+              rows={3}
+              placeholder="e.g. VP Sales / RevOps leaders at 50-200 person B2B SaaS companies who are hiring SDRs but missing pipeline targets. Angle: we build outbound systems that book meetings without headcount."
+              value={brief}
+              onChange={e => setBrief(e.target.value)}
+              autoFocus
+            />
+          </div>
+
+          <div className="seq-ai-panel-row">
+            <label className="form-label" style={{ margin: 0 }}>Steps</label>
+            <div className="seq-ai-count">
+              <button type="button" onClick={() => setCount(c => Math.max(2, c - 1))} disabled={count <= 2}>–</button>
+              <span>{count}</span>
+              <button type="button" onClick={() => setCount(c => Math.min(6, c + 1))} disabled={count >= 6}>+</button>
+            </div>
+            <span className="seq-ai-hint">All email · escalating touches, days apart</span>
+          </div>
+
+          {hasContent && (
+            <div className="seq-ai-warning">
+              <Icon name="warning" size={11} /> This will replace your {steps.length} current step{steps.length === 1 ? '' : 's'}.
+            </div>
+          )}
+
+          {aiError && (
+            <div className="seq-ai-warning seq-ai-warning-error">
+              <Icon name="error" size={11} /> {aiError}
+            </div>
+          )}
+
+          <div className="seq-ai-panel-footer">
+            <button className="btn-sm btn-sm-ghost" onClick={() => { setAiOpen(false); setAiError(null) }}>Cancel</button>
+            <button className="btn-sm btn-sm-primary" onClick={handleGenerate} disabled={!brief.trim() || aiBusy}>
+              {aiBusy ? <span className="btn-loading"><span />Drafting…</span> : <>
+                <Icon name="sparkles" size={11} /> Generate {count} steps
+              </>}
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* ── Steps ───────────────────────────────── */}
       <div className="seq-steps">

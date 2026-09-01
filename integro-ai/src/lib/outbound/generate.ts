@@ -39,6 +39,48 @@ function fill(tpl: string, p: Prospect, s: Sender): string {
     .replace(/\{\{\s*senderCompany\s*\}\}/g, s.company || '')
 }
 
+export interface GeneratedStep {
+  type: 'email'
+  delay: number
+  subject: string
+  body: string
+}
+
+const SEQUENCE_ENDPOINT = '/api/agent/generate-sequence'
+
+// Draft a whole multi-step sequence template from a short brief (audience +
+// angle). Unlike generateDrafts, there's no sensible deterministic fallback
+// for "write me a sequence" — this surfaces a clear error instead so the
+// Sequence Builder can show it rather than silently doing nothing.
+export async function generateSequenceTemplate(
+  brief: string,
+  stepCount: number,
+  sender: Sender,
+): Promise<{ ok: boolean; steps?: GeneratedStep[]; error?: string }> {
+  try {
+    const { data: { session } } = await supabase.auth.getSession()
+    const r = await fetch(SEQUENCE_ENDPOINT, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+      },
+      body: JSON.stringify({ sender, brief, stepCount }),
+    })
+    const data = await r.json().catch(() => ({} as { steps?: GeneratedStep[]; error?: string }))
+    if (!r.ok) {
+      const hint = r.status === 401 ? 'Sign in required.' : r.status === 400 && !data.error ? 'AI is not configured on the server yet.' : ''
+      return { ok: false, error: [data.error, hint].filter(Boolean).join(' ') || `Generation failed (${r.status})` }
+    }
+    if (!Array.isArray(data.steps) || data.steps.length === 0) {
+      return { ok: false, error: 'AI returned no steps — try rephrasing your brief' }
+    }
+    return { ok: true, steps: data.steps }
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Network error' }
+  }
+}
+
 export async function generateDrafts(
   prospects: Prospect[],
   step: SequenceStep,

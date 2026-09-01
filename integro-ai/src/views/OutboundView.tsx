@@ -104,7 +104,7 @@ export default function OutboundView({ active, agentStates, toggleAgent, addToas
                     <div className="card-title">{editTarget ? 'Edit Sequence' : 'New Sequence'}</div>
                     <button className="seq-builder-back" onClick={cancelBuilder}><Icon name="close" size={11} /> Cancel</button>
                   </div>
-                  <SequenceBuilder onSave={handleSave} onCancel={cancelBuilder} initial={editTarget} />
+                  <SequenceBuilder onSave={handleSave} onCancel={cancelBuilder} initial={editTarget} sender={sender} />
                 </>
               ) : (
                 <>
