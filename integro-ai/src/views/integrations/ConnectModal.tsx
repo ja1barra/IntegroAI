@@ -31,8 +31,12 @@ const CONFIGS: Partial<Record<Provider, ConnectConfig>> = {
     placeholder: 'pat-na1-xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx',
     instructions: 'In HubSpot, go to Settings → Integrations → Private Apps. Create a new private app, grant the required scopes, and copy the access token.',
     scopes: ['crm.objects.contacts.read/write', 'crm.objects.deals.read/write', 'timeline'],
-    connectUrl: 'https://app.hubspot.com/private-apps',
-    connectLabel: 'Open HubSpot Private Apps',
+    // HubSpot's private-apps settings page is portal-scoped
+    // (app.hubspot.com/private-apps/{hubId}) — we don't know the user's hub ID
+    // client-side, and the bare path 404s. Link to the app home instead and
+    // let the written instructions above route them the rest of the way.
+    connectUrl: 'https://app.hubspot.com/',
+    connectLabel: 'Open HubSpot',
   },
   apollo: {
     label: 'API Key',
