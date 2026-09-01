@@ -8,13 +8,13 @@ export function isDemoKey(key: string): boolean {
   return !key || key.includes('demo') || key.includes('xxxx') || key.startsWith('pat-demo')
 }
 
-async function proxyGet(endpoint: string, apiKey: string): Promise<Response> {
+async function proxyRequest(endpoint: string, apiKey: string, httpMethod: 'GET' | 'POST' = 'GET', body?: unknown): Promise<Response> {
   // Try Vercel proxy first (avoids any CORS edge cases)
   try {
     const r = await fetch(PROXY, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ endpoint, apiKey, httpMethod: 'GET' }),
+      body: JSON.stringify({ endpoint, apiKey, httpMethod, body }),
     })
     // 404 means proxy isn't deployed yet — fall through to direct call
     if (r.status !== 404) return r
@@ -22,9 +22,19 @@ async function proxyGet(endpoint: string, apiKey: string): Promise<Response> {
     // Proxy not reachable (local dev without vercel dev) — fall through
   }
   // Direct browser call (HubSpot v3 CRM API supports CORS with private app tokens)
-  return fetch(`${BASE}${endpoint}`, {
-    headers: { Authorization: `Bearer ${apiKey}` },
-  })
+  const init: RequestInit = {
+    method: httpMethod,
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      ...(httpMethod === 'POST' && { 'Content-Type': 'application/json' }),
+    },
+  }
+  if (httpMethod === 'POST' && body !== undefined) init.body = JSON.stringify(body)
+  return fetch(`${BASE}${endpoint}`, init)
+}
+
+function proxyGet(endpoint: string, apiKey: string): Promise<Response> {
+  return proxyRequest(endpoint, apiKey, 'GET')
 }
 
 export async function fetchContacts(apiKey: string): Promise<HubSpotContact[]> {
@@ -55,8 +65,10 @@ export async function testConnection(apiKey: string): Promise<TestResult> {
     return { ok: true, data: { total: 1247 } }
   }
   try {
-    const res = await proxyGet('/crm/v3/objects/contacts?limit=1', apiKey)
-    if (res.status === 401) return { ok: false, error: 'Invalid token — verify your Private App Token in HubSpot' }
+    // The plain list endpoint doesn't return a total count — use search
+    // (with an empty query) to get one for the "records ready to sync" UI.
+    const res = await proxyRequest('/crm/v3/objects/contacts/search', apiKey, 'POST', { limit: 1 })
+    if (res.status === 401) return { ok: false, error: 'Invalid token — verify your API token in HubSpot' }
     if (res.status === 403) return { ok: false, error: 'Forbidden — check that your app has CRM object scopes enabled' }
     if (!res.ok) return { ok: false, error: `HubSpot API error ${res.status}` }
     const data = await res.json() as { total: number }
