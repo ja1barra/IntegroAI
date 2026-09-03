@@ -30,8 +30,8 @@ simulated — so the product is always demoable.
 
 ## Setup
 
-1. **Database** — in the Supabase SQL Editor, run `supabase/schema.sql` then
-   `supabase/outbound-schema.sql` (both idempotent).
+1. **Database** — in the Supabase SQL Editor, run `supabase/schema.sql`, then
+   `supabase/outbound-schema.sql`, then `supabase/playbooks-schema.sql` (all idempotent).
 2. **Frontend env** — copy `.env.example` → `.env.local` and fill in your
    Supabase URL + anon key.
 3. **Server env (Vercel)** — set the variables in the repo-root `.env.example`
@@ -52,9 +52,9 @@ Supabase backend. It's almost always one of:
    Open the Supabase dashboard and click **Restore / Resume**.
 3. **Wrong URL/key.** Copy them from Supabase → Project Settings → API.
 
-After the backend is reachable, run `supabase/schema.sql` then
-`supabase/outbound-schema.sql` in the SQL editor so sign-up and the app tables
-exist.
+After the backend is reachable, run `supabase/schema.sql`, then
+`supabase/outbound-schema.sql`, then `supabase/playbooks-schema.sql` in the SQL
+editor so sign-up and the app tables exist.
 
 ## Stack
 

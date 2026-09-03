@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { supabase } from './lib/supabase'
 import AppHeader from './components/layout/AppHeader'
 import Sidebar from './components/layout/Sidebar'
@@ -6,6 +6,8 @@ import NotificationPanel from './components/layout/NotificationPanel'
 import TweaksPanel from './components/layout/TweaksPanel'
 import ToastContainer from './components/ui/Toast'
 import TaskCreatorModal from './components/ui/TaskCreatorModal'
+import PlaybookModal from './components/ui/PlaybookModal'
+import PlaybookGeneratorModal from './components/ui/PlaybookGeneratorModal'
 import Dashboard from './views/Dashboard'
 import TasksView from './views/TasksView'
 import OutboundView from './views/OutboundView'
@@ -19,7 +21,9 @@ import TeamView from './views/TeamView'
 import ProfileView from './views/ProfileView'
 import AcademyView from './views/AcademyView'
 import { useTasks } from './hooks/useTasks'
+import { usePlaybooks } from './hooks/usePlaybooks'
 import type { User, AgentStates, AgentId, Toast, Tweaks, Task } from './types'
+import type { Playbook } from './lib/playbooks/types'
 
 const DEFAULT_AGENT_STATES: AgentStates = { outbound: 'running', demand: 'running', success: 'running', 'playbook-agent': 'running' }
 const DEFAULT_TWEAKS: Tweaks = { darkMode: false, accentColor: 'orange', density: 'default' }
@@ -45,15 +49,6 @@ export default function AppShell({ user, userId, onLogout }: { user: User; userI
   const [tweaksOpen, setTweaksOpen] = useState(false)
   const [settingsReady, setSettingsReady] = useState(false)
 
-  const { tasks, addTask, updateTask, deleteTask } = useTasks()
-  const [taskModalOpen, setTaskModalOpen] = useState(false)
-  const [editingTask, setEditingTask] = useState<Task | null>(null)
-
-  const openTaskModal = useCallback((task?: Task) => {
-    setEditingTask(task ?? null)
-    setTaskModalOpen(true)
-  }, [])
-
   const agentStatesRef = useRef(agentStates)
   const tweaksRef = useRef(tweaks)
   agentStatesRef.current = agentStates
@@ -63,6 +58,30 @@ export default function AppShell({ user, userId, onLogout }: { user: User; userI
     const id = Date.now()
     setToasts(p => [...p, { id, msg, type }])
     setTimeout(() => setToasts(p => p.filter(t => t.id !== id)), 3200)
+  }, [])
+
+  const { tasks, addTask, updateTask, deleteTask } = useTasks()
+  const [taskModalOpen, setTaskModalOpen] = useState(false)
+  const [editingTask, setEditingTask] = useState<Task | null>(null)
+
+  const openTaskModal = useCallback((task?: Task) => {
+    setEditingTask(task ?? null)
+    setTaskModalOpen(true)
+  }, [])
+
+  const playbookSender = useMemo(() => ({ name: user.name, company: user.org }), [user])
+  const {
+    playbooks, loading: playbooksLoading, stats: playbookStats, busy: playbookBusy,
+    addPlaybook, editPlaybook, removePlaybook, setStatus: setPlaybookStatus,
+    generateFromCrm, generateFromWeb,
+  } = usePlaybooks(playbookSender, addToast)
+  const [playbookModalOpen, setPlaybookModalOpen] = useState(false)
+  const [editingPlaybook, setEditingPlaybook] = useState<Playbook | null>(null)
+  const [playbookGeneratorOpen, setPlaybookGeneratorOpen] = useState(false)
+
+  const openPlaybookModal = useCallback((pb?: Playbook) => {
+    setEditingPlaybook(pb ?? null)
+    setPlaybookModalOpen(true)
   }, [])
 
   // Load persisted settings on mount
@@ -151,8 +170,13 @@ export default function AppShell({ user, userId, onLogout }: { user: User; userI
           <OutboundView      active={view === 'outbound'}         {...sharedProps} user={user} />
           <DemandView        active={view === 'demand'}           {...sharedProps} />
           <SuccessView       active={view === 'success'}          {...sharedProps} />
-          <PlaybookAgentView active={view === 'playbook-agent'}   {...sharedProps} />
-          <PlaybooksView     active={view === 'playbooks'}        addToast={addToast} />
+          <PlaybookAgentView active={view === 'playbook-agent'}   {...sharedProps} onNavigate={setView}
+            playbooks={playbooks} stats={playbookStats}
+            onNew={() => openPlaybookModal()} onGenerate={() => setPlaybookGeneratorOpen(true)} />
+          <PlaybooksView     active={view === 'playbooks'}
+            playbooks={playbooks} loading={playbooksLoading} stats={playbookStats}
+            onNew={() => openPlaybookModal()} onGenerate={() => setPlaybookGeneratorOpen(true)}
+            onEdit={openPlaybookModal} onDelete={removePlaybook} onSetStatus={setPlaybookStatus} />
           <ReportsView       active={view === 'reports'}          addToast={addToast} />
           <IntegrationsView  active={view === 'integrations'}     addToast={addToast} />
           <TeamView          active={view === 'team'}             addToast={addToast} user={user} />
@@ -177,6 +201,26 @@ export default function AppShell({ user, userId, onLogout }: { user: User; userI
           }
         }}
       />
+
+      <PlaybookModal
+        isOpen={playbookModalOpen}
+        onClose={() => setPlaybookModalOpen(false)}
+        initial={editingPlaybook}
+        onSubmit={(data) => {
+          if (editingPlaybook) editPlaybook(editingPlaybook.id, data)
+          else addPlaybook(data)
+        }}
+      />
+
+      <PlaybookGeneratorModal
+        isOpen={playbookGeneratorOpen}
+        onClose={() => setPlaybookGeneratorOpen(false)}
+        busy={playbookBusy}
+        generateFromCrm={generateFromCrm}
+        generateFromWeb={generateFromWeb}
+        onSave={(input) => addPlaybook(input)}
+      />
+
       {tweaksOpen && (
         <TweaksPanel tweaks={tweaks} setTweak={setTweak} onClose={() => setTweaksOpen(false)} />
       )}
