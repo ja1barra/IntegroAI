@@ -51,7 +51,7 @@ export async function fetchContacts(apiKey: string): Promise<HubSpotContact[]> {
 export async function fetchDeals(apiKey: string): Promise<HubSpotDeal[]> {
   if (isDemoKey(apiKey)) return MOCK_HUBSPOT_DEALS
   const res = await proxyGet(
-    '/crm/v3/objects/deals?limit=50&properties=dealname,amount,dealstage,closedate',
+    '/crm/v3/objects/deals?limit=50&properties=dealname,amount,dealstage,closedate,dealtype',
     apiKey
   )
   if (!res.ok) throw new Error(`HubSpot API ${res.status}: ${res.statusText}`)

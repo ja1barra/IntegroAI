@@ -1,11 +1,12 @@
 # Integro AI — Revenue OS
 
-AI operating system for SaaS companies. **Agent 01 — Outbound Sales Machine**,
-**Agent 02 — Demand Generation**, and **Agent 04 — Growth Playbooks** are live.
-Outbound syncs prospects from your CRM, generates AI-personalized email
-sequences, and sends through a connected mailbox. Demand Gen scores MQLs from
-HubSpot and reports GA4 traffic/channel performance, with one-click routing
-into Outbound. Customer Success is on the roadmap.
+AI operating system for SaaS companies. All four agents are live. Outbound
+syncs prospects from your CRM, generates AI-personalized email sequences, and
+sends through a connected mailbox. Demand Gen scores MQLs from HubSpot and
+reports GA4 traffic/channel performance, with one-click routing into Outbound.
+Customer Success scores account health from Intercom and tracks expansion
+pipeline from HubSpot, with one-click follow-up tasks. Growth Playbooks drafts
+tactical plays from CRM win/loss data or live web research.
 
 ## Outbound Sales Machine (Agent 01)
 
@@ -50,6 +51,26 @@ already used elsewhere in the app:
 Same demo-fallback pattern as every other agent: with no HubSpot/GA4 connected
 it shows realistic demo data (a small banner says so) so the page is never
 empty; connect either in Integrations for live numbers.
+
+## Customer Success Engine (Agent 03)
+
+Also built entirely on existing integration libs — Intercom and HubSpot:
+
+- **Account Health Overview** — every Intercom contact with role "user" (as
+  opposed to a "lead"/trial) gets a transparent 0–100 health score from how
+  recently they were last seen active plus how many support conversations are
+  still open, via `lib/success/accounts.ts`. Sorted worst-first so the accounts
+  that need attention are at the top. "Flag for Follow-up" drops a pre-filled
+  task (health score, last-active, open conversations) straight into Tasks —
+  no Supabase auth required for that part since Tasks is local-first.
+- **Expansion Opportunities** — sums open HubSpot deals whose `dealtype` is
+  "existingbusiness" (a standard HubSpot property distinguishing new business
+  from expansion/upsell, not a custom field), via `lib/success/expansion.ts`.
+- Renewal tracking isn't implemented — there's no contract/subscription
+  end-date signal available from either integration yet.
+
+Same demo-fallback pattern: no Intercom/HubSpot connected shows realistic
+demo data with a banner saying so.
 
 ## Bring your own AI
 
@@ -155,7 +176,7 @@ src/
 |---|-------|--------|-------------|
 | 01 | Outbound Sales Machine | **Live** | CRM sync, AI sequencing, human review, mailbox send |
 | 02 | Demand Generation | **Live** | GA4 traffic & channel performance, scored MQL queue from HubSpot, route-to-Outbound |
-| 03 | Customer Success Engine | Roadmap | Health monitoring, churn risk, expansion tracking |
+| 03 | Customer Success Engine | **Live** | Intercom-scored account health, churn risk, HubSpot expansion pipeline |
 | 04 | SaaS Growth Playbooks | **Live** | Win/loss analysis, coaching signals, playbook generation |
 
 ## Design System

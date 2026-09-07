@@ -253,7 +253,7 @@ export default function AppShell({ user, userId, onLogout }: { user: User; userI
           <TasksView         active={view === 'tasks'}           tasks={tasks} onUpdateTask={updateTask} onDeleteTask={deleteTask} onOpenModal={openTaskModal} />
           <OutboundView      active={view === 'outbound'}         {...sharedProps} user={user} />
           <DemandView        active={view === 'demand'}           {...sharedProps} onNavigate={setView} />
-          <SuccessView       active={view === 'success'}          {...sharedProps} />
+          <SuccessView       active={view === 'success'}          {...sharedProps} onNavigate={setView} addTask={addTask} />
           <PlaybookAgentView active={view === 'playbook-agent'}   {...sharedProps} onNavigate={setView}
             playbooks={playbooks} stats={playbookStats}
             onNew={() => openPlaybookModal()} onGenerate={() => setPlaybookGeneratorOpen(true)} />

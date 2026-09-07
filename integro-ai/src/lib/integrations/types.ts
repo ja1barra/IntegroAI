@@ -75,6 +75,7 @@ export interface HubSpotDeal {
     amount: string
     dealstage: string
     closedate: string
+    dealtype?: string
   }
 }
 

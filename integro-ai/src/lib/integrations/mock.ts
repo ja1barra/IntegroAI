@@ -21,12 +21,15 @@ export const MOCK_HUBSPOT_CONTACTS: HubSpotContact[] = [
 ]
 
 export const MOCK_HUBSPOT_DEALS: HubSpotDeal[] = [
-  { id: 'd1', properties: { dealname: 'Acme Corp — Enterprise', amount: '48000', dealstage: 'closedwon', closedate: '2025-06-15' } },
-  { id: 'd2', properties: { dealname: 'TechFlow — Growth', amount: '24000', dealstage: 'proposaldelivered', closedate: '2025-07-01' } },
-  { id: 'd3', properties: { dealname: 'ScalePro — Starter', amount: '12000', dealstage: 'appointmentscheduled', closedate: '2025-06-30' } },
-  { id: 'd4', properties: { dealname: 'DataStack — Enterprise', amount: '96000', dealstage: 'contractsent', closedate: '2025-06-20' } },
-  { id: 'd5', properties: { dealname: 'CloudPilot — Growth', amount: '36000', dealstage: 'presentationscheduled', closedate: '2025-07-15' } },
-  { id: 'd6', properties: { dealname: 'RevOps.xyz — Platform', amount: '60000', dealstage: 'decisionmakerboughtin', closedate: '2025-06-25' } },
+  { id: 'd1', properties: { dealname: 'Acme Corp — Enterprise', amount: '48000', dealstage: 'closedwon', closedate: '2025-06-15', dealtype: 'newbusiness' } },
+  { id: 'd2', properties: { dealname: 'TechFlow — Growth', amount: '24000', dealstage: 'proposaldelivered', closedate: '2025-07-01', dealtype: 'newbusiness' } },
+  { id: 'd3', properties: { dealname: 'ScalePro — Starter', amount: '12000', dealstage: 'appointmentscheduled', closedate: '2025-06-30', dealtype: 'newbusiness' } },
+  { id: 'd4', properties: { dealname: 'DataStack — Enterprise', amount: '96000', dealstage: 'contractsent', closedate: '2025-06-20', dealtype: 'newbusiness' } },
+  { id: 'd5', properties: { dealname: 'CloudPilot — Growth', amount: '36000', dealstage: 'presentationscheduled', closedate: '2025-07-15', dealtype: 'newbusiness' } },
+  { id: 'd6', properties: { dealname: 'RevOps.xyz — Platform', amount: '60000', dealstage: 'decisionmakerboughtin', closedate: '2025-06-25', dealtype: 'newbusiness' } },
+  { id: 'd7', properties: { dealname: 'Acme Corp — Seat Expansion', amount: '18000', dealstage: 'presentationscheduled', closedate: '2025-07-20', dealtype: 'existingbusiness' } },
+  { id: 'd8', properties: { dealname: 'TechFlow — Upgrade to Enterprise', amount: '30000', dealstage: 'contractsent', closedate: '2025-07-10', dealtype: 'existingbusiness' } },
+  { id: 'd9', properties: { dealname: 'CloudPilot — Add-on Module', amount: '9000', dealstage: 'appointmentscheduled', closedate: '2025-07-25', dealtype: 'existingbusiness' } },
 ]
 
 export const MOCK_APOLLO_CONTACTS: ApolloContact[] = [

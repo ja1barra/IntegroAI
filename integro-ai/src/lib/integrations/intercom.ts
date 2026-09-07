@@ -71,16 +71,25 @@ export interface IntercomConversation {
   contacts: { contacts: { id: string }[] }
 }
 
+// last_seen_at values are relative to "now" so the recency component of
+// health scoring (see lib/success/accounts.ts) reacts to something real in
+// demo mode, the same way the other agents' mock data stays "live-looking".
+function secondsAgo(daysBack: number): number {
+  return Math.floor((Date.now() - daysBack * 24 * 60 * 60 * 1000) / 1000)
+}
+
 const MOCK_INTERCOM_CONTACTS: IntercomContact[] = [
-  { id: 'ic1', email: 'sarah@acmecorp.com', name: 'Sarah Chen', role: 'user', custom_attributes: { plan: 'enterprise' }, created_at: 1716000000, last_seen_at: 1716580000 },
-  { id: 'ic2', email: 'marcus@techflow.io', name: 'Marcus Rodriguez', role: 'user', custom_attributes: { plan: 'growth' }, created_at: 1714000000, last_seen_at: 1716500000 },
-  { id: 'ic3', email: 'emily@growthlab.com', name: 'Emily Park', role: 'user', custom_attributes: { plan: 'starter' }, created_at: 1712000000, last_seen_at: 1716200000 },
-  { id: 'ic4', email: 'trial@cloudpilot.dev', name: 'Lisa Wang', role: 'lead', custom_attributes: { plan: 'trial' }, created_at: 1716400000 },
-  { id: 'ic5', email: 'james@scalepro.io', name: 'James Wilson', role: 'user', custom_attributes: { plan: 'growth' }, created_at: 1710000000, last_seen_at: 1716100000 },
+  { id: 'ic1', email: 'sarah@acmecorp.com', name: 'Sarah Chen', role: 'user', custom_attributes: { plan: 'enterprise', company: 'Acme Corp' }, created_at: secondsAgo(120), last_seen_at: secondsAgo(1) },
+  { id: 'ic2', email: 'marcus@techflow.io', name: 'Marcus Rodriguez', role: 'user', custom_attributes: { plan: 'growth', company: 'TechFlow' }, created_at: secondsAgo(200), last_seen_at: secondsAgo(4) },
+  { id: 'ic3', email: 'emily@growthlab.com', name: 'Emily Park', role: 'user', custom_attributes: { plan: 'starter', company: 'GrowthLab' }, created_at: secondsAgo(90), last_seen_at: secondsAgo(22) },
+  { id: 'ic4', email: 'trial@cloudpilot.dev', name: 'Lisa Wang', role: 'lead', custom_attributes: { plan: 'trial', company: 'CloudPilot' }, created_at: secondsAgo(3) },
+  { id: 'ic5', email: 'james@scalepro.io', name: 'James Wilson', role: 'user', custom_attributes: { plan: 'growth', company: 'ScalePro' }, created_at: secondsAgo(260), last_seen_at: secondsAgo(45) },
+  { id: 'ic6', email: 'nina@scalex.ai', name: 'Nina Okafor', role: 'user', custom_attributes: { plan: 'enterprise', company: 'ScaleX AI' }, created_at: secondsAgo(150), last_seen_at: secondsAgo(60) },
 ]
 
 const MOCK_INTERCOM_CONVERSATIONS: IntercomConversation[] = [
-  { id: 'conv1', title: 'Integration not syncing', state: 'open', created_at: 1716500000, updated_at: 1716580000, assignee: { name: 'Support' }, contacts: { contacts: [{ id: 'ic1' }] } },
-  { id: 'conv2', title: 'Upgrade plan question', state: 'closed', created_at: 1716300000, updated_at: 1716400000, assignee: { name: 'Sales' }, contacts: { contacts: [{ id: 'ic4' }] } },
-  { id: 'conv3', title: 'Feature request — bulk export', state: 'open', created_at: 1716100000, updated_at: 1716200000, assignee: { name: 'Product' }, contacts: { contacts: [{ id: 'ic2' }] } },
+  { id: 'conv1', title: 'Integration not syncing', state: 'open', created_at: secondsAgo(6), updated_at: secondsAgo(1), assignee: { name: 'Support' }, contacts: { contacts: [{ id: 'ic5' }] } },
+  { id: 'conv2', title: 'Upgrade plan question', state: 'closed', created_at: secondsAgo(9), updated_at: secondsAgo(8), assignee: { name: 'Sales' }, contacts: { contacts: [{ id: 'ic4' }] } },
+  { id: 'conv3', title: 'Feature request — bulk export', state: 'open', created_at: secondsAgo(3), updated_at: secondsAgo(2), assignee: { name: 'Product' }, contacts: { contacts: [{ id: 'ic2' }] } },
+  { id: 'conv4', title: 'Billing discrepancy', state: 'open', created_at: secondsAgo(12), updated_at: secondsAgo(5), assignee: { name: 'Support' }, contacts: { contacts: [{ id: 'ic6' }] } },
 ]
