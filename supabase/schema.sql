@@ -52,7 +52,7 @@ create or replace trigger on_auth_user_created
 create table if not exists public.user_settings (
   user_id      uuid primary key references auth.users on delete cascade,
   agent_states jsonb not null default '{"outbound":"running","demand":"running","success":"running","playbook-agent":"running"}',
-  tweaks       jsonb not null default '{"darkMode":false,"accentColor":"orange","density":"default"}',
+  tweaks       jsonb not null default '{"theme":"light","accentColor":"orange","density":"default","glassOpacity":60,"fontFamily":"sans","notifications":{"email":true,"sound":true,"desktop":false}}',
   updated_at   timestamptz not null default now()
 );
 

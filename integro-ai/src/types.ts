@@ -39,10 +39,24 @@ export interface ActivityItem {
   time: string
 }
 
+export type ThemeMode = 'light' | 'dark' | 'system'
+export type AccentColor = 'orange' | 'teal' | 'violet' | 'blue' | 'rose'
+export type DensityMode = 'compact' | 'default' | 'comfortable'
+export type FontFamily = 'sans' | 'inter' | 'serif' | 'mono' | 'system'
+
+export interface NotificationPrefs {
+  email: boolean
+  sound: boolean
+  desktop: boolean
+}
+
 export interface Tweaks {
-  darkMode: boolean
-  accentColor: 'orange' | 'teal' | 'violet'
-  density: 'default' | 'compact'
+  theme: ThemeMode
+  accentColor: AccentColor
+  density: DensityMode
+  glassOpacity: number // 10–95, percent
+  fontFamily: FontFamily
+  notifications: NotificationPrefs
 }
 
 export interface SharedViewProps {

@@ -30,6 +30,7 @@ const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
   { label: 'Settings', items: [
     { id: 'integrations', icon: 'integrations', label: 'Integrations' },
     { id: 'team',         icon: 'team',         label: 'Team' },
+    { id: 'settings',     icon: 'settings',     label: 'Settings' },
   ]},
 ]
 

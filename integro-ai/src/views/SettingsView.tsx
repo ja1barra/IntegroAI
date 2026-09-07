@@ -1,0 +1,411 @@
+import { useEffect, useState } from 'react'
+import { supabase } from '../lib/supabase'
+import { Icon } from '../components/ui/Icon'
+import Toggle from '../components/ui/Toggle'
+import type { User, Tweaks, AccentColor, ThemeMode, DensityMode, FontFamily } from '../types'
+
+interface Props {
+  active: boolean
+  user: User
+  tweaks: Tweaks
+  setTweak: (key: keyof Tweaks, value: Tweaks[keyof Tweaks]) => void
+  addToast: (m: string, t?: 'success' | 'error') => void
+  onLogout: () => void
+}
+
+type Tab = 'profile' | 'appearance' | 'notifications' | 'security'
+
+const TABS: { id: Tab; label: string }[] = [
+  { id: 'profile',       label: 'Profile' },
+  { id: 'appearance',    label: 'Appearance' },
+  { id: 'notifications', label: 'Notifications' },
+  { id: 'security',      label: 'Account & Security' },
+]
+
+function SectionCard({ title, subtitle, children }: { title: string; subtitle?: string; children: React.ReactNode }) {
+  return (
+    <div className="card" style={{ marginBottom: 16 }}>
+      <div style={{ marginBottom: 18 }}>
+        <div style={{ fontSize: 14, fontWeight: 600 }}>{title}</div>
+        {subtitle && <div style={{ fontSize: 12, color: 'var(--ink-l)', marginTop: 3 }}>{subtitle}</div>}
+      </div>
+      {children}
+    </div>
+  )
+}
+
+function SegButton({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button
+      onClick={onClick}
+      className="btn-sm"
+      style={{
+        flex: 1, padding: '8px 0', fontSize: 11, fontFamily: "'DM Mono',monospace",
+        border: `1px solid ${active ? 'var(--orange)' : 'var(--rule)'}`,
+        borderRadius: 'var(--radius-pill)',
+        background: active ? 'var(--orange)' : 'transparent',
+        color: active ? '#fff' : 'var(--ink)',
+        cursor: 'pointer', transition: 'all 0.15s',
+      }}
+    >
+      {children}
+    </button>
+  )
+}
+
+function Row({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, padding: '12px 0', borderBottom: '1px solid var(--rule-m)' }}>
+      <div>
+        <div style={{ fontSize: 13, color: 'var(--ink)' }}>{label}</div>
+        {hint && <div style={{ fontSize: 11, color: 'var(--ink-l)', marginTop: 2 }}>{hint}</div>}
+      </div>
+      {children}
+    </div>
+  )
+}
+
+// ── Profile ──────────────────────────────────────────────────
+
+function ProfileTab({ user, addToast }: { user: User; addToast: Props['addToast'] }) {
+  const [name, setName] = useState(user.name)
+  const [org, setOrg] = useState(user.org)
+  const [role, setRole] = useState(user.role)
+  const [email, setEmail] = useState<string | null>(null)
+  const [memberSince, setMemberSince] = useState<string | null>(null)
+  const [newEmail, setNewEmail] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [emailSaving, setEmailSaving] = useState(false)
+
+  useEffect(() => {
+    setName(user.name); setOrg(user.org); setRole(user.role)
+  }, [user])
+
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => {
+      setEmail(data.user?.email ?? null)
+      if (data.user?.created_at) {
+        setMemberSince(new Date(data.user.created_at).toLocaleDateString('en-US', { month: 'long', year: 'numeric' }))
+      }
+    })
+  }, [])
+
+  const dirty = name !== user.name || org !== user.org || role !== user.role
+
+  const handleSave = async () => {
+    if (!name.trim()) return
+    setSaving(true)
+    const initials = name.trim().split(/\s+/).map(w => w[0]).join('').slice(0, 2).toUpperCase() || 'U'
+    const { error } = await supabase.auth.updateUser({ data: { name: name.trim(), org: org.trim() || 'My Company', role: role.trim() || 'Strategist', initials } })
+    setSaving(false)
+    if (error) addToast(error.message, 'error')
+    else addToast('Profile updated')
+  }
+
+  const handleEmailChange = async () => {
+    if (!newEmail.trim() || newEmail.trim() === email) return
+    setEmailSaving(true)
+    const { error } = await supabase.auth.updateUser({ email: newEmail.trim() })
+    setEmailSaving(false)
+    if (error) addToast(error.message, 'error')
+    else { addToast('Check your new inbox to confirm the email change'); setNewEmail('') }
+  }
+
+  return (
+    <>
+      <SectionCard title="Your profile">
+        <div style={{ display: 'flex', alignItems: 'center', gap: 20, marginBottom: 24 }}>
+          <div style={{ width: 64, height: 64, borderRadius: '50%', background: 'var(--ink)', color: 'var(--cream)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, fontFamily: "'DM Mono',monospace", flexShrink: 0 }}>
+            {user.initials}
+          </div>
+          <div>
+            <div style={{ fontSize: 18, fontWeight: 700 }}>{user.name}</div>
+            <div style={{ fontSize: 13, color: 'var(--ink-l)', marginTop: 2 }}>{user.role} · {user.org}</div>
+          </div>
+        </div>
+
+        <div className="form-row-2">
+          <div className="form-group">
+            <label className="form-label">Full Name</label>
+            <input type="text" className="form-input" value={name} onChange={e => setName(e.target.value)} />
+          </div>
+          <div className="form-group">
+            <label className="form-label">Role</label>
+            <input type="text" className="form-input" value={role} onChange={e => setRole(e.target.value)} />
+          </div>
+        </div>
+        <div className="form-group">
+          <label className="form-label">Organization</label>
+          <input type="text" className="form-input" value={org} onChange={e => setOrg(e.target.value)} />
+        </div>
+
+        <button className="btn-sm btn-sm-primary" onClick={handleSave} disabled={!dirty || saving}>
+          {saving ? <span className="btn-loading"><span />Saving...</span> : 'Save Changes'}
+        </button>
+      </SectionCard>
+
+      <SectionCard title="Email address" subtitle={memberSince ? `Member since ${memberSince}` : undefined}>
+        <div className="form-row-2">
+          <div className="form-group">
+            <label className="form-label">Current Email</label>
+            <input type="text" className="form-input" value={email ?? ''} disabled style={{ opacity: 0.65 }} />
+          </div>
+          <div className="form-group">
+            <label className="form-label">New Email</label>
+            <input type="email" className="form-input" placeholder="you@newdomain.com" value={newEmail} onChange={e => setNewEmail(e.target.value)} />
+          </div>
+        </div>
+        <button className="btn-sm btn-sm-ghost" onClick={handleEmailChange} disabled={!newEmail.trim() || emailSaving}>
+          {emailSaving ? <span className="btn-loading"><span />Sending...</span> : 'Change Email'}
+        </button>
+        <div style={{ fontSize: 11, color: 'var(--ink-l)', marginTop: 10 }}>
+          We'll send a confirmation link to the new address before the change takes effect.
+        </div>
+      </SectionCard>
+    </>
+  )
+}
+
+// ── Appearance ───────────────────────────────────────────────
+
+const ACCENT_SWATCHES: { id: AccentColor; hex: string }[] = [
+  { id: 'orange', hex: '#d4501a' },
+  { id: 'teal',   hex: '#0ea5a0' },
+  { id: 'violet', hex: '#7c3aed' },
+  { id: 'blue',   hex: '#2563eb' },
+  { id: 'rose',   hex: '#e11d48' },
+]
+
+const FONT_OPTIONS: { id: FontFamily; label: string; preview: string }[] = [
+  { id: 'sans',   label: 'DM Sans (default)', preview: "'DM Sans', sans-serif" },
+  { id: 'inter',  label: 'Inter',             preview: "'Inter', sans-serif" },
+  { id: 'serif',  label: 'Serif',             preview: "'Lora', Georgia, serif" },
+  { id: 'mono',   label: 'Monospace',         preview: "'DM Mono', monospace" },
+  { id: 'system', label: 'System UI',         preview: '-apple-system, BlinkMacSystemFont, sans-serif' },
+]
+
+function AppearanceTab({ tweaks, setTweak }: { tweaks: Tweaks; setTweak: Props['setTweak'] }) {
+  return (
+    <>
+      <SectionCard title="Theme" subtitle="Choose how Integro AI looks on this device.">
+        <div style={{ display: 'flex', gap: 8, marginBottom: 4 }}>
+          {(['light', 'dark', 'system'] as ThemeMode[]).map(t => (
+            <SegButton key={t} active={tweaks.theme === t} onClick={() => setTweak('theme', t)}>
+              {t === 'system' ? 'Match System' : t[0].toUpperCase() + t.slice(1)}
+            </SegButton>
+          ))}
+        </div>
+      </SectionCard>
+
+      <SectionCard title="Accent color">
+        <div style={{ display: 'flex', gap: 12 }}>
+          {ACCENT_SWATCHES.map(s => (
+            <div
+              key={s.id}
+              onClick={() => setTweak('accentColor', s.id)}
+              title={s.id}
+              style={{
+                width: 32, height: 32, borderRadius: '50%', background: s.hex, cursor: 'pointer',
+                border: `2.5px solid ${tweaks.accentColor === s.id ? 'var(--ink)' : 'transparent'}`,
+                boxShadow: tweaks.accentColor === s.id ? '0 0 0 2px var(--cream)' : 'none',
+                transition: 'all 0.15s',
+              }}
+            />
+          ))}
+        </div>
+      </SectionCard>
+
+      <SectionCard title="Glass transparency" subtitle="Adjust how see-through the frosted-glass panels are.">
+        <input
+          type="range"
+          min={10}
+          max={95}
+          step={1}
+          value={tweaks.glassOpacity}
+          onChange={e => setTweak('glassOpacity', Number(e.target.value))}
+          style={{ width: '100%', accentColor: 'var(--orange)' }}
+        />
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, fontFamily: "'DM Mono',monospace", color: 'var(--ink-l)', marginTop: 4, marginBottom: 16 }}>
+          <span>More transparent</span>
+          <span>{tweaks.glassOpacity}%</span>
+          <span>More opaque</span>
+        </div>
+        <div className="card" style={{ padding: '16px 18px' }}>
+          <div style={{ fontSize: 12, color: 'var(--ink-m)' }}>This card uses your current glass settings — the sidebar, header, and other panels update the same way.</div>
+        </div>
+      </SectionCard>
+
+      <SectionCard title="Font">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {FONT_OPTIONS.map(f => (
+            <div
+              key={f.id}
+              onClick={() => setTweak('fontFamily', f.id)}
+              style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer',
+                padding: '10px 14px', borderRadius: 'var(--radius-sm)',
+                border: `1px solid ${tweaks.fontFamily === f.id ? 'var(--orange)' : 'var(--rule)'}`,
+                background: tweaks.fontFamily === f.id ? 'rgba(212,80,26,0.06)' : 'transparent',
+              }}
+            >
+              <span style={{ fontFamily: f.preview, fontSize: 14 }}>{f.label} — The quick brown fox</span>
+              {tweaks.fontFamily === f.id && <Icon name="check" size={13} style={{ color: 'var(--orange)' }} />}
+            </div>
+          ))}
+        </div>
+      </SectionCard>
+
+      <SectionCard title="Layout density">
+        <div style={{ display: 'flex', gap: 8 }}>
+          {(['compact', 'default', 'comfortable'] as DensityMode[]).map(d => (
+            <SegButton key={d} active={tweaks.density === d} onClick={() => setTweak('density', d)}>
+              {d[0].toUpperCase() + d.slice(1)}
+            </SegButton>
+          ))}
+        </div>
+      </SectionCard>
+    </>
+  )
+}
+
+// ── Notifications ────────────────────────────────────────────
+
+function NotificationsTab({ tweaks, setTweak, addToast }: { tweaks: Tweaks; setTweak: Props['setTweak']; addToast: Props['addToast'] }) {
+  const handleDesktopToggle = async () => {
+    const turningOn = !tweaks.notifications.desktop
+    if (turningOn && typeof Notification !== 'undefined') {
+      const permission = Notification.permission === 'granted'
+        ? 'granted'
+        : await Notification.requestPermission()
+      if (permission !== 'granted') {
+        addToast('Desktop notifications were blocked by your browser', 'error')
+        return
+      }
+    }
+    setTweak('notifications', { ...tweaks.notifications, desktop: turningOn })
+  }
+
+  return (
+    <SectionCard title="Notification preferences" subtitle="Choose what Integro AI can notify you about.">
+      <Row label="Email notifications" hint="Deal alerts, weekly digests, and agent approval requests.">
+        <Toggle enabled={tweaks.notifications.email} onChange={() => setTweak('notifications', { ...tweaks.notifications, email: !tweaks.notifications.email })} />
+      </Row>
+      <Row label="Sound" hint="Play a sound when a new in-app notification arrives.">
+        <Toggle enabled={tweaks.notifications.sound} onChange={() => setTweak('notifications', { ...tweaks.notifications, sound: !tweaks.notifications.sound })} />
+      </Row>
+      <Row label="Desktop notifications" hint="Requires browser permission.">
+        <Toggle enabled={tweaks.notifications.desktop} onChange={handleDesktopToggle} />
+      </Row>
+    </SectionCard>
+  )
+}
+
+// ── Security ─────────────────────────────────────────────────
+
+function SecurityTab({ addToast, onLogout }: { addToast: Props['addToast']; onLogout: () => void }) {
+  const [password, setPassword] = useState('')
+  const [confirm, setConfirm] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(false)
+
+  const canSave = password.length >= 8 && password === confirm
+
+  const handlePasswordChange = async () => {
+    if (!canSave) return
+    setSaving(true)
+    const { error } = await supabase.auth.updateUser({ password })
+    setSaving(false)
+    if (error) addToast(error.message, 'error')
+    else { addToast('Password updated'); setPassword(''); setConfirm('') }
+  }
+
+  return (
+    <>
+      <SectionCard title="Change password">
+        <div className="form-row-2">
+          <div className="form-group">
+            <label className="form-label">New Password</label>
+            <input type="password" className="form-input" placeholder="At least 8 characters" value={password} onChange={e => setPassword(e.target.value)} />
+          </div>
+          <div className="form-group">
+            <label className="form-label">Confirm Password</label>
+            <input type="password" className="form-input" placeholder="Repeat password" value={confirm} onChange={e => setConfirm(e.target.value)} />
+          </div>
+        </div>
+        {password && confirm && password !== confirm && (
+          <div style={{ fontSize: 11, color: '#c0392b', marginBottom: 10 }}>Passwords don't match</div>
+        )}
+        <button className="btn-sm btn-sm-primary" onClick={handlePasswordChange} disabled={!canSave || saving}>
+          {saving ? <span className="btn-loading"><span />Updating...</span> : 'Update Password'}
+        </button>
+      </SectionCard>
+
+      <SectionCard title="Session">
+        <Row label="Signed in on this device" hint="Sign out if you're on a shared or public computer.">
+          <button className="btn-sm btn-sm-ghost" onClick={onLogout}>Sign Out</button>
+        </Row>
+      </SectionCard>
+
+      <SectionCard title="Danger zone">
+        <Row label="Delete account" hint="Permanently removes your account and all associated data.">
+          {!confirmDelete ? (
+            <button className="btn-sm btn-sm-ghost" style={{ color: '#c0392b' }} onClick={() => setConfirmDelete(true)}>Delete Account</button>
+          ) : (
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button className="btn-sm btn-sm-ghost" onClick={() => setConfirmDelete(false)}>Cancel</button>
+              <button
+                className="btn-sm btn-sm-ghost"
+                style={{ color: '#c0392b', borderColor: 'rgba(192,57,43,0.4)' }}
+                onClick={() => { setConfirmDelete(false); addToast('Account deletion requests are handled by your workspace admin — reach out to have this account removed.', 'error') }}
+              >
+                Confirm Delete
+              </button>
+            </div>
+          )}
+        </Row>
+      </SectionCard>
+    </>
+  )
+}
+
+// ── Main view ────────────────────────────────────────────────
+
+export default function SettingsView({ active, user, tweaks, setTweak, addToast, onLogout }: Props) {
+  const [tab, setTab] = useState<Tab>('profile')
+
+  return (
+    <div className={`view ${active ? 'active' : ''}`}>
+      <div className="view-header">
+        <div>
+          <div className="view-subtitle">Preferences</div>
+          <h1 className="display view-title">Settings</h1>
+        </div>
+      </div>
+
+      <div style={{ display: 'flex', gap: 0, borderBottom: '1px solid var(--rule)', marginBottom: 20 }}>
+        {TABS.map(t => (
+          <button
+            key={t.id}
+            onClick={() => setTab(t.id)}
+            style={{
+              padding: '10px 18px', border: 'none', background: 'none', cursor: 'pointer',
+              fontFamily: "'DM Mono',monospace", fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase',
+              color: tab === t.id ? 'var(--ink)' : 'var(--ink-l)',
+              borderBottom: tab === t.id ? '2px solid var(--orange)' : '2px solid transparent',
+              marginBottom: -1, transition: 'color 0.15s',
+            }}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      <div style={{ maxWidth: 620 }}>
+        {tab === 'profile' && <ProfileTab user={user} addToast={addToast} />}
+        {tab === 'appearance' && <AppearanceTab tweaks={tweaks} setTweak={setTweak} />}
+        {tab === 'notifications' && <NotificationsTab tweaks={tweaks} setTweak={setTweak} addToast={addToast} />}
+        {tab === 'security' && <SecurityTab addToast={addToast} onLogout={onLogout} />}
+      </div>
+    </div>
+  )
+}

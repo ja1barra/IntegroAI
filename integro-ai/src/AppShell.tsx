@@ -3,7 +3,6 @@ import { supabase } from './lib/supabase'
 import AppHeader from './components/layout/AppHeader'
 import Sidebar from './components/layout/Sidebar'
 import NotificationPanel from './components/layout/NotificationPanel'
-import TweaksPanel from './components/layout/TweaksPanel'
 import ToastContainer from './components/ui/Toast'
 import TaskCreatorModal from './components/ui/TaskCreatorModal'
 import PlaybookModal from './components/ui/PlaybookModal'
@@ -18,7 +17,7 @@ import PlaybooksView from './views/PlaybooksView'
 import ReportsView from './views/ReportsView'
 import IntegrationsView from './views/IntegrationsView'
 import TeamView from './views/TeamView'
-import ProfileView from './views/ProfileView'
+import SettingsView from './views/SettingsView'
 import AcademyView from './views/AcademyView'
 import { useTasks } from './hooks/useTasks'
 import { usePlaybooks } from './hooks/usePlaybooks'
@@ -26,7 +25,51 @@ import type { User, AgentStates, AgentId, Toast, Tweaks, Task } from './types'
 import type { Playbook } from './lib/playbooks/types'
 
 const DEFAULT_AGENT_STATES: AgentStates = { outbound: 'running', demand: 'running', success: 'running', 'playbook-agent': 'running' }
-const DEFAULT_TWEAKS: Tweaks = { darkMode: false, accentColor: 'orange', density: 'default' }
+const DEFAULT_TWEAKS: Tweaks = {
+  theme: 'light',
+  accentColor: 'orange',
+  density: 'default',
+  glassOpacity: 60,
+  fontFamily: 'sans',
+  notifications: { email: true, sound: true, desktop: false },
+}
+
+const ACCENTS: Record<Tweaks['accentColor'], [string, string]> = {
+  orange: ['#d4501a', '#b84215'],
+  teal:   ['#0ea5a0', '#0c8a86'],
+  violet: ['#7c3aed', '#6d28d9'],
+  blue:   ['#2563eb', '#1d4ed8'],
+  rose:   ['#e11d48', '#be123c'],
+}
+
+const DENSITIES: Record<Tweaks['density'], [string, string]> = {
+  compact:     ['44px', '196px'],
+  default:     ['56px', '220px'],
+  comfortable: ['64px', '244px'],
+}
+
+const FONT_STACKS: Record<Tweaks['fontFamily'], string> = {
+  sans:   "'DM Sans', sans-serif",
+  inter:  "'Inter', sans-serif",
+  serif:  "'Lora', Georgia, 'Times New Roman', serif",
+  mono:   "'DM Mono', monospace",
+  system: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif",
+}
+
+// Older saved settings only ever had a `darkMode` boolean and no
+// `notifications` block — merge onto the current defaults so a user who
+// saved settings before these fields existed doesn't end up with holes
+// the appearance/notification controls choke on.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function migrateTweaks(raw: any): Tweaks {
+  const theme: Tweaks['theme'] = raw?.theme ?? (raw?.darkMode ? 'dark' : 'light')
+  return {
+    ...DEFAULT_TWEAKS,
+    ...raw,
+    theme,
+    notifications: { ...DEFAULT_TWEAKS.notifications, ...(raw?.notifications ?? {}) },
+  }
+}
 
 async function persistSettings(userId: string, agentStates: AgentStates, tweaks: Tweaks) {
   const { error } = await supabase.from('user_settings').upsert({
@@ -46,7 +89,6 @@ export default function AppShell({ user, userId, onLogout }: { user: User; userI
   const [notifOpen, setNotifOpen] = useState(false)
   const [toasts, setToasts] = useState<Toast[]>([])
   const [tweaks, setTweaksState] = useState<Tweaks>(DEFAULT_TWEAKS)
-  const [tweaksOpen, setTweaksOpen] = useState(false)
   const [settingsReady, setSettingsReady] = useState(false)
 
   const agentStatesRef = useRef(agentStates)
@@ -97,8 +139,7 @@ export default function AppShell({ user, userId, onLogout }: { user: User; userI
         } else if (data) {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           if (data.agent_states) setAgentStates(data.agent_states as any as AgentStates)
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          if (data.tweaks) setTweaksState(data.tweaks as any as Tweaks)
+          if (data.tweaks) setTweaksState(migrateTweaks(data.tweaks))
         }
         setSettingsReady(true)
       })
@@ -132,20 +173,54 @@ export default function AppShell({ user, userId, onLogout }: { user: User; userI
   const setTweak = (key: keyof Tweaks, value: Tweaks[keyof Tweaks]) =>
     setTweaksState(prev => ({ ...prev, [key]: value }))
 
+  // Theme 'system' tracks the OS preference live.
+  const [systemDark, setSystemDark] = useState(() => window.matchMedia('(prefers-color-scheme: dark)').matches)
+  useEffect(() => {
+    const mq = window.matchMedia('(prefers-color-scheme: dark)')
+    const handler = (e: MediaQueryListEvent) => setSystemDark(e.matches)
+    mq.addEventListener('change', handler)
+    return () => mq.removeEventListener('change', handler)
+  }, [])
+  const effectiveDark = tweaks.theme === 'dark' || (tweaks.theme === 'system' && systemDark)
+
   // Apply tweaks to DOM
   useEffect(() => {
-    document.body.classList.toggle('dark', tweaks.darkMode)
-    const accents: Record<string, [string, string]> = {
-      orange: ['#d4501a', '#b84215'],
-      teal:   ['#0ea5a0', '#0c8a86'],
-      violet: ['#7c3aed', '#6d28d9'],
-    }
-    const [a, ah] = accents[tweaks.accentColor] ?? accents.orange
+    document.body.classList.toggle('dark', effectiveDark)
+
+    const [a, ah] = ACCENTS[tweaks.accentColor] ?? ACCENTS.orange
     document.documentElement.style.setProperty('--orange', a)
     document.documentElement.style.setProperty('--orange-h', ah)
-    document.documentElement.style.setProperty('--header-h', tweaks.density === 'compact' ? '44px' : '56px')
-    document.documentElement.style.setProperty('--sidebar-w', tweaks.density === 'compact' ? '196px' : '220px')
-  }, [tweaks])
+
+    const [headerH, sidebarW] = DENSITIES[tweaks.density] ?? DENSITIES.default
+    document.documentElement.style.setProperty('--header-h', headerH)
+    document.documentElement.style.setProperty('--sidebar-w', sidebarW)
+
+    document.body.style.setProperty('--font-body', FONT_STACKS[tweaks.fontFamily] ?? FONT_STACKS.sans)
+
+    // Glass opacity — set on body (not documentElement) so the inline style
+    // wins over the `body.dark { --glass: ... }` rule in index.css, which
+    // otherwise shadows anything inherited from a lighter ancestor.
+    const alpha = Math.min(95, Math.max(10, tweaks.glassOpacity)) / 100
+    const [gr, gg, gb] = effectiveDark ? [30, 26, 22] : [255, 251, 244]
+    document.body.style.setProperty('--glass', `rgba(${gr},${gg},${gb},${alpha})`)
+    const hiAlpha = effectiveDark ? Math.min(0.5, alpha * 0.1) : Math.min(0.95, alpha * 1.17)
+    document.body.style.setProperty('--glass-hi', `rgba(255,255,255,${hiAlpha.toFixed(2)})`)
+
+    // These are applied imperatively to <body>/<html> rather than scoped to
+    // this component's own DOM, so they must be cleaned up on sign-out —
+    // otherwise a dark-mode / custom-glass preference would leak onto the
+    // sign-in screen after AppShell unmounts.
+    return () => {
+      document.body.classList.remove('dark')
+      document.body.style.removeProperty('--font-body')
+      document.body.style.removeProperty('--glass')
+      document.body.style.removeProperty('--glass-hi')
+      document.documentElement.style.removeProperty('--orange')
+      document.documentElement.style.removeProperty('--orange-h')
+      document.documentElement.style.removeProperty('--header-h')
+      document.documentElement.style.removeProperty('--sidebar-w')
+    }
+  }, [tweaks, effectiveDark])
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') setNotifOpen(false) }
@@ -180,7 +255,7 @@ export default function AppShell({ user, userId, onLogout }: { user: User; userI
           <ReportsView       active={view === 'reports'}          addToast={addToast} />
           <IntegrationsView  active={view === 'integrations'}     addToast={addToast} />
           <TeamView          active={view === 'team'}             addToast={addToast} user={user} />
-          <ProfileView       active={view === 'profile'}          user={user} />
+          <SettingsView      active={view === 'settings'}         user={user} tweaks={tweaks} setTweak={setTweak} addToast={addToast} onLogout={onLogout} />
           <AcademyView       active={view === 'academy'} />
         </main>
       </div>
@@ -220,10 +295,6 @@ export default function AppShell({ user, userId, onLogout }: { user: User; userI
         generateFromWeb={generateFromWeb}
         onSave={(input) => addPlaybook(input)}
       />
-
-      {tweaksOpen && (
-        <TweaksPanel tweaks={tweaks} setTweak={setTweak} onClose={() => setTweaksOpen(false)} />
-      )}
     </div>
   )
 }

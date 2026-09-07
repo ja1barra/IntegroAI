@@ -58,7 +58,7 @@ body {
     #f5ece0;
   background-attachment: fixed;
   color: var(--ink);
-  font-family: 'DM Sans', sans-serif;
+  font-family: var(--font-body, 'DM Sans', sans-serif);
   font-size: 14px;
   line-height: 1.5;
   transition: color 0.3s;
@@ -325,7 +325,7 @@ body {
 .header-avatar {
   width:34px; height:34px; border-radius:var(--radius-pill);
   background: var(--ink);
-  color:#f5f0e8;
+  color:var(--cream);
   display:flex; align-items:center; justify-content:center;
   font-family:'DM Mono',monospace; font-size:11px;
   cursor:pointer; transition:all 0.2s;
@@ -390,7 +390,7 @@ body {
 }
 .sidebar-avatar {
   width:28px; height:28px; border-radius:var(--radius-pill);
-  background:var(--ink); color:#f5f0e8;
+  background:var(--ink); color:var(--cream);
   display:flex; align-items:center; justify-content:center;
   font-family:'DM Mono',monospace; font-size:10px; flex-shrink:0;
 }
@@ -432,7 +432,7 @@ body {
 }
 .user-menu-avatar {
   width:34px; height:34px; border-radius:var(--radius-pill);
-  background: var(--ink); color:#f5f0e8;
+  background: var(--ink); color:var(--cream);
   display:flex; align-items:center; justify-content:center;
   font-family:'DM Mono',monospace; font-size:11px; flex-shrink:0;
 }

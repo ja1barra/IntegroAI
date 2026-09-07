@@ -31,7 +31,7 @@ export default function UserMenu({ user, onNavigate, onLogout, onClose, directio
 
   const handleItem = (id: string) => {
     if (id === 'connections') { onNavigate('integrations'); onClose(); return }
-    if (id === 'settings')    { onNavigate('team');         onClose(); return }
+    if (id === 'profile')     { onNavigate('settings');     onClose(); return }
     onNavigate(id)
     onClose()
   }
