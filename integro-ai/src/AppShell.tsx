@@ -206,6 +206,14 @@ export default function AppShell({ user, userId, onLogout }: { user: User; userI
     const hiAlpha = effectiveDark ? Math.min(0.5, alpha * 0.1) : Math.min(0.95, alpha * 1.17)
     document.body.style.setProperty('--glass-hi', `rgba(255,255,255,${hiAlpha.toFixed(2)})`)
 
+    // Modals sit on top of a dark scrim (.modal-overlay) rather than the
+    // page background, so letting them go as transparent as the ambient
+    // glass preference allows makes their text unreadable — floor their
+    // opacity independently of the slider while still letting a *more*
+    // opaque preference carry through.
+    const modalAlpha = Math.max(alpha, 0.92)
+    document.body.style.setProperty('--modal-glass', `rgba(${gr},${gg},${gb},${modalAlpha})`)
+
     // These are applied imperatively to <body>/<html> rather than scoped to
     // this component's own DOM, so they must be cleaned up on sign-out —
     // otherwise a dark-mode / custom-glass preference would leak onto the
@@ -215,6 +223,7 @@ export default function AppShell({ user, userId, onLogout }: { user: User; userI
       document.body.style.removeProperty('--font-body')
       document.body.style.removeProperty('--glass')
       document.body.style.removeProperty('--glass-hi')
+      document.body.style.removeProperty('--modal-glass')
       document.documentElement.style.removeProperty('--orange')
       document.documentElement.style.removeProperty('--orange-h')
       document.documentElement.style.removeProperty('--header-h')

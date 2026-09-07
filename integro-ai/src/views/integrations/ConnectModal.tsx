@@ -181,7 +181,7 @@ export default function ConnectModal({ provider, name, logo, logoColor, mode, on
     }} onClick={e => { if (e.target === e.currentTarget) onClose() }}>
       <div className="card fade-in" style={{
         width: '100%', maxWidth: 560, padding: 0, overflow: 'hidden',
-        background: 'rgba(250,247,242,0.97)',
+        background: 'var(--modal-glass)',
         borderRadius: 16,
         boxShadow: '0 24px 64px rgba(26,23,20,0.22)',
       }}>
