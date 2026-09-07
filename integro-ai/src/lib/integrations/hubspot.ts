@@ -40,7 +40,7 @@ function proxyGet(endpoint: string, apiKey: string): Promise<Response> {
 export async function fetchContacts(apiKey: string): Promise<HubSpotContact[]> {
   if (isDemoKey(apiKey)) return MOCK_HUBSPOT_CONTACTS
   const res = await proxyGet(
-    '/crm/v3/objects/contacts?limit=50&properties=firstname,lastname,email,jobtitle,company',
+    '/crm/v3/objects/contacts?limit=100&properties=firstname,lastname,email,jobtitle,company,lifecyclestage,createdate,hs_analytics_source',
     apiKey
   )
   if (!res.ok) throw new Error(`HubSpot API ${res.status}: ${res.statusText}`)

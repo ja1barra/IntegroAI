@@ -1,16 +1,23 @@
 import type { HubSpotContact, HubSpotDeal, ApolloContact, SlackChannel, SyncEvent, OAuthScope } from './types'
 
+// createdate values are relative to "now" so the recency component of MQL
+// scoring (see lib/demand/mqls.ts) has something realistic to react to in
+// demo mode, the same way the other agents' mock data stays "live-looking".
+function daysAgo(n: number): string {
+  return new Date(Date.now() - n * 24 * 60 * 60 * 1000).toISOString()
+}
+
 export const MOCK_HUBSPOT_CONTACTS: HubSpotContact[] = [
-  { id: '1', properties: { firstname: 'Sarah', lastname: 'Chen', email: 'sarah.chen@acmecorp.com', jobtitle: 'VP of Sales', company: 'Acme Corp' } },
-  { id: '2', properties: { firstname: 'Marcus', lastname: 'Rodriguez', email: 'm.rodriguez@techflow.io', jobtitle: 'Head of Revenue', company: 'TechFlow' } },
-  { id: '3', properties: { firstname: 'Emily', lastname: 'Park', email: 'epark@growthlab.com', jobtitle: 'CEO', company: 'GrowthLab' } },
-  { id: '4', properties: { firstname: 'James', lastname: 'Wilson', email: 'jwilson@scalepro.io', jobtitle: 'VP Marketing', company: 'ScalePro' } },
-  { id: '5', properties: { firstname: 'Priya', lastname: 'Sharma', email: 'p.sharma@datastack.co', jobtitle: 'Head of GTM', company: 'DataStack' } },
-  { id: '6', properties: { firstname: 'Alex', lastname: 'Turner', email: 'a.turner@revops.xyz', jobtitle: 'RevOps Director', company: 'RevOps.xyz' } },
-  { id: '7', properties: { firstname: 'Lisa', lastname: 'Wang', email: 'lwang@cloudpilot.dev', jobtitle: 'CRO', company: 'CloudPilot' } },
-  { id: '8', properties: { firstname: 'Tom', lastname: 'Bradley', email: 'tbradley@fusionco.io', jobtitle: 'VP Sales', company: 'FusionCo' } },
-  { id: '9', properties: { firstname: 'Nina', lastname: 'Okafor', email: 'n.okafor@scalex.ai', jobtitle: 'Director of Sales', company: 'ScaleX AI' } },
-  { id: '10', properties: { firstname: 'Ravi', lastname: 'Menon', email: 'ravi@pipelineiq.com', jobtitle: 'Founder', company: 'PipelineIQ' } },
+  { id: '1', properties: { firstname: 'Sarah', lastname: 'Chen', email: 'sarah.chen@acmecorp.com', jobtitle: 'VP of Sales', company: 'Acme Corp', lifecyclestage: 'marketingqualifiedlead', createdate: daysAgo(1), hs_analytics_source: 'ORGANIC_SEARCH' } },
+  { id: '2', properties: { firstname: 'Marcus', lastname: 'Rodriguez', email: 'm.rodriguez@techflow.io', jobtitle: 'Head of Revenue', company: 'TechFlow', lifecyclestage: 'salesqualifiedlead', createdate: daysAgo(3), hs_analytics_source: 'PAID_SEARCH' } },
+  { id: '3', properties: { firstname: 'Emily', lastname: 'Park', email: 'epark@growthlab.com', jobtitle: 'CEO', company: 'GrowthLab', lifecyclestage: 'marketingqualifiedlead', createdate: daysAgo(2), hs_analytics_source: 'DIRECT_TRAFFIC' } },
+  { id: '4', properties: { firstname: 'James', lastname: 'Wilson', email: 'jwilson@scalepro.io', jobtitle: 'VP Marketing', company: 'ScalePro', lifecyclestage: 'lead', createdate: daysAgo(12), hs_analytics_source: 'SOCIAL_MEDIA' } },
+  { id: '5', properties: { firstname: 'Priya', lastname: 'Sharma', email: 'p.sharma@datastack.co', jobtitle: 'Head of GTM', company: 'DataStack', lifecyclestage: 'marketingqualifiedlead', createdate: daysAgo(5), hs_analytics_source: 'ORGANIC_SEARCH' } },
+  { id: '6', properties: { firstname: 'Alex', lastname: 'Turner', email: 'a.turner@revops.xyz', jobtitle: 'RevOps Director', company: 'RevOps.xyz', lifecyclestage: 'subscriber', createdate: daysAgo(20), hs_analytics_source: 'REFERRALS' } },
+  { id: '7', properties: { firstname: 'Lisa', lastname: 'Wang', email: 'lwang@cloudpilot.dev', jobtitle: 'CRO', company: 'CloudPilot', lifecyclestage: 'opportunity', createdate: daysAgo(8), hs_analytics_source: 'PAID_SEARCH' } },
+  { id: '8', properties: { firstname: 'Tom', lastname: 'Bradley', email: 'tbradley@fusionco.io', jobtitle: 'VP Sales', company: 'FusionCo', lifecyclestage: 'lead', createdate: daysAgo(15), hs_analytics_source: 'EMAIL_MARKETING' } },
+  { id: '9', properties: { firstname: 'Nina', lastname: 'Okafor', email: 'n.okafor@scalex.ai', jobtitle: 'Director of Sales', company: 'ScaleX AI', lifecyclestage: 'marketingqualifiedlead', createdate: daysAgo(4), hs_analytics_source: 'ORGANIC_SEARCH' } },
+  { id: '10', properties: { firstname: 'Ravi', lastname: 'Menon', email: 'ravi@pipelineiq.com', jobtitle: 'Founder', company: 'PipelineIQ', lifecyclestage: 'salesqualifiedlead', createdate: daysAgo(1), hs_analytics_source: 'DIRECT_TRAFFIC' } },
 ]
 
 export const MOCK_HUBSPOT_DEALS: HubSpotDeal[] = [

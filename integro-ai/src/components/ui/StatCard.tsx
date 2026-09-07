@@ -14,10 +14,13 @@ interface Props {
 
 export default function StatCard({ label, value, unit, prefix, delta, deltaType = 'delta-flat', active, spark }: Props) {
   const raw = value.replace(/[^0-9.]/g, '')
+  const hasNumber = raw.length > 0
   const num = parseFloat(raw) || 0
   const isFloat = raw.includes('.')
   const counted = useCountUp(Math.round(num * (isFloat ? 10 : 1)), active)
-  const display = isFloat ? (counted / 10).toFixed(1) : counted
+  // A value with no digits (e.g. "—" for "not available yet") isn't a
+  // count-up target — show it as-is rather than silently collapsing to "0".
+  const display = hasNumber ? (isFloat ? (counted / 10).toFixed(1) : counted) : value
   const bars = spark ?? [3, 4, 3.5, 5, 5.5, 6.5, 8]
   const maxBar = Math.max(...bars)
   const accentColor = deltaType === 'delta-down' ? '#e74c3c' : deltaType === 'delta-flat' ? 'var(--ink-l)' : 'var(--orange)'

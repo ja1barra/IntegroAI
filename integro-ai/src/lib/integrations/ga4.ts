@@ -51,12 +51,38 @@ export async function fetchProperties(credential: string): Promise<GA4Property[]
   return props
 }
 
+// Demand Gen doesn't (yet) offer a property picker — for an account with a
+// single GA4 property this is exactly right, and for multiple properties it
+// picks the first one until that UI exists.
+export async function fetchPrimaryPropertyId(credential: string): Promise<string | null> {
+  if (isDemoToken(credential)) return MOCK_GA4_PROPERTIES[0].id
+  const props = await fetchProperties(credential)
+  return props[0]?.id ?? null
+}
+
 export async function runReport(credential: string, propertyId: string): Promise<GA4Report> {
   if (isDemoToken(credential)) return MOCK_GA4_REPORT
   const res = await proxyCall(`/v1beta/${propertyId}:runReport`, credential, {
     dateRanges: [{ startDate: '30daysAgo', endDate: 'today' }],
     dimensions: [{ name: 'sessionDefaultChannelGrouping' }],
     metrics: [{ name: 'sessions' }, { name: 'conversions' }, { name: 'totalRevenue' }],
+  })
+  if (!res.ok) throw new Error(`GA4 API ${res.status}`)
+  return res.json() as Promise<GA4Report>
+}
+
+// Same report shape, keyed by landing page instead of channel — powers the
+// "Top Content" card (content performance is what actually drives demand,
+// vs. MQL-level attribution which HubSpot doesn't expose without a much
+// richer marketing-events integration).
+export async function runLandingPageReport(credential: string, propertyId: string): Promise<GA4Report> {
+  if (isDemoToken(credential)) return MOCK_GA4_LANDING_REPORT
+  const res = await proxyCall(`/v1beta/${propertyId}:runReport`, credential, {
+    dateRanges: [{ startDate: '30daysAgo', endDate: 'today' }],
+    dimensions: [{ name: 'landingPagePlusQueryString' }],
+    metrics: [{ name: 'sessions' }, { name: 'conversions' }],
+    orderBys: [{ metric: { metricName: 'sessions' }, desc: true }],
+    limit: 5,
   })
   if (!res.ok) throw new Error(`GA4 API ${res.status}`)
   return res.json() as Promise<GA4Report>
@@ -87,5 +113,17 @@ const MOCK_GA4_REPORT: GA4Report = {
     { dimensionValues: [{ value: 'Direct' }], metricValues: [{ value: '8200' }, { value: '198' }, { value: '34200' }] },
     { dimensionValues: [{ value: 'Paid Search' }], metricValues: [{ value: '4800' }, { value: '142' }, { value: '27800' }] },
     { dimensionValues: [{ value: 'Email' }], metricValues: [{ value: '3000' }, { value: '89' }, { value: '18400' }] },
+  ],
+}
+
+const MOCK_GA4_LANDING_REPORT: GA4Report = {
+  dimensionHeaders: [{ name: 'landingPagePlusQueryString' }],
+  metricHeaders: [{ name: 'sessions' }, { name: 'conversions' }],
+  rows: [
+    { dimensionValues: [{ value: '/product/revenue-os' }], metricValues: [{ value: '6200' }, { value: '164' }] },
+    { dimensionValues: [{ value: '/blog/ai-sdr-playbook' }], metricValues: [{ value: '4100' }, { value: '58' }] },
+    { dimensionValues: [{ value: '/pricing' }], metricValues: [{ value: '3400' }, { value: '96' }] },
+    { dimensionValues: [{ value: '/' }], metricValues: [{ value: '2900' }, { value: '41' }] },
+    { dimensionValues: [{ value: '/customers/techflow' }], metricValues: [{ value: '1800' }, { value: '33' }] },
   ],
 }

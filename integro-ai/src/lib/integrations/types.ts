@@ -62,6 +62,9 @@ export interface HubSpotContact {
     email: string
     jobtitle: string
     company: string
+    lifecyclestage?: string
+    createdate?: string
+    hs_analytics_source?: string
   }
 }
 

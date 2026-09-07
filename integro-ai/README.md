@@ -1,9 +1,11 @@
 # Integro AI — Revenue OS
 
-AI operating system for SaaS companies. **Agent 01 — Outbound Sales Machine** is
-live end-to-end: sync prospects from your CRM, generate AI-personalized email
-sequences, review them, and send through a connected mailbox. Demand Generation,
-Customer Success, and Growth Playbooks are on the roadmap.
+AI operating system for SaaS companies. **Agent 01 — Outbound Sales Machine**,
+**Agent 02 — Demand Generation**, and **Agent 04 — Growth Playbooks** are live.
+Outbound syncs prospects from your CRM, generates AI-personalized email
+sequences, and sends through a connected mailbox. Demand Gen scores MQLs from
+HubSpot and reports GA4 traffic/channel performance, with one-click routing
+into Outbound. Customer Success is on the roadmap.
 
 ## Outbound Sales Machine (Agent 01)
 
@@ -27,6 +29,27 @@ The working pipeline:
 Every step degrades gracefully: with no AI provider configured it falls back to
 deterministic mail-merge personalization, and with no mailbox connected sends are
 simulated — so the product is always demoable.
+
+## Demand Generation (Agent 02)
+
+No new integrations required — it's built entirely on the HubSpot and GA4 libs
+already used elsewhere in the app:
+
+- **MQL Queue** — pulls HubSpot contacts and runs them through a transparent,
+  deterministic 0–100 score (lifecycle stage + title seniority + recency +
+  channel), so a rep can see *why* a lead is ranked where it is. "Route to
+  Outbound" adds the contact straight into the Outbound prospect list
+  (`lib/outbound/store.ts`'s `upsertProspects`).
+- **Traffic & Channel Performance** — a 30-day GA4 report by channel
+  (sessions/conversions/revenue) and by landing page ("Top Landing Pages"),
+  via `lib/integrations/ga4.ts`'s `runReport` / `runLandingPageReport`.
+- **CAC** and **Pipeline from Inbound** are left as "—" rather than a fabricated
+  number — they'd need an ad-spend integration and a deal↔contact-source join
+  that don't exist yet.
+
+Same demo-fallback pattern as every other agent: with no HubSpot/GA4 connected
+it shows realistic demo data (a small banner says so) so the page is never
+empty; connect either in Integrations for live numbers.
 
 ## Bring your own AI
 
@@ -131,9 +154,9 @@ src/
 | # | Agent | Status | Description |
 |---|-------|--------|-------------|
 | 01 | Outbound Sales Machine | **Live** | CRM sync, AI sequencing, human review, mailbox send |
-| 02 | Demand Generation | Roadmap | Content signals, paid performance, MQL routing |
+| 02 | Demand Generation | **Live** | GA4 traffic & channel performance, scored MQL queue from HubSpot, route-to-Outbound |
 | 03 | Customer Success Engine | Roadmap | Health monitoring, churn risk, expansion tracking |
-| 04 | SaaS Growth Playbooks | Roadmap | Win/loss analysis, coaching signals, playbook generation |
+| 04 | SaaS Growth Playbooks | **Live** | Win/loss analysis, coaching signals, playbook generation |
 
 ## Design System
 
