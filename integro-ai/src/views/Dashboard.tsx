@@ -1,9 +1,12 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import StatCard from '../components/ui/StatCard'
 import AgentPill from '../components/ui/AgentPill'
 import EmptyState from '../components/ui/EmptyState'
 import { Icon } from '../components/ui/Icon'
 import { getDashboardSummary, type DashboardSummary } from '../lib/outbound/store'
+import { fetchMqlSnapshot } from '../lib/demand/mqls'
+import { fetchAccountsSnapshot } from '../lib/success/accounts'
+import { listPlaybooks } from '../lib/playbooks/store'
 import type { SharedViewProps } from '../types'
 
 const RUN_LABEL: Record<string, string> = {
@@ -20,20 +23,48 @@ function timeAgo(iso: string): string {
   return `${Math.floor(s / 86400)}d ago`
 }
 
+interface AgentMetrics {
+  mqlsThisMonth: number | null
+  atRiskAccounts: number | null
+  playbookCount: number | null
+}
+
+const EMPTY_METRICS: AgentMetrics = { mqlsThisMonth: null, atRiskAccounts: null, playbookCount: null }
+
 export default function Dashboard({ active, onNavigate, agentStates, addToast, onNewTask }: SharedViewProps & { onNavigate: (v: string) => void; onNewTask: () => void }) {
   const [sum, setSum] = useState<DashboardSummary | null>(null)
+  const [metrics, setMetrics] = useState<AgentMetrics>(EMPTY_METRICS)
+
+  // Every agent now has its own real data source (Outbound via Supabase,
+  // Demand Gen via HubSpot/GA4, Customer Success via Intercom/HubSpot,
+  // Playbooks via Supabase) — refetch all of them whenever the dashboard
+  // becomes active again so the headline numbers never go stale between
+  // visits, the same way each agent's own view refreshes on mount.
+  const reload = useCallback(async () => {
+    const [outbound, mql, accounts, playbooks] = await Promise.allSettled([
+      getDashboardSummary(),
+      fetchMqlSnapshot(),
+      fetchAccountsSnapshot(),
+      listPlaybooks(),
+    ])
+    if (outbound.status === 'fulfilled') setSum(outbound.value)
+    setMetrics({
+      mqlsThisMonth: mql.status === 'fulfilled' ? mql.value.mqlsThisMonth : null,
+      atRiskAccounts: accounts.status === 'fulfilled' ? accounts.value.atRiskCount : null,
+      playbookCount: playbooks.status === 'fulfilled' ? playbooks.value.length : null,
+    })
+  }, [])
 
   useEffect(() => {
-    let alive = true
-    getDashboardSummary().then(s => { if (alive) setSum(s) }).catch(() => {})
-    return () => { alive = false }
-  }, [active])
+    if (!active) return
+    reload().catch(() => {})
+  }, [active, reload])
 
   const agentCards = [
-    { id:'outbound',       num:'01', name:'Outbound Sales Machine',   desc:'Prospecting, sequencing, and meeting booking — fully automated.', metric: sum ? `${sum.sent}` : '--', metricLabel: 'emails sent', live: true },
-    { id:'demand',         num:'02', name:'Demand Generation',         desc:'Inbound pipeline, content signals, and MQL routing.', metric: '--', metricLabel: 'coming soon', live: false },
-    { id:'success',        num:'03', name:'Customer Success Engine',   desc:'Health monitoring, churn risk flagging, and expansion tracking.', metric: '--', metricLabel: 'coming soon', live: false },
-    { id:'playbook-agent', num:'04', name:'SaaS Growth Playbooks',     desc:'Win/loss analysis, coaching signals, and playbook generation.', metric: '--', metricLabel: 'coming soon', live: false },
+    { id:'outbound',       num:'01', name:'Outbound Sales Machine',   desc:'Prospecting, sequencing, and meeting booking — fully automated.', metric: sum ? `${sum.sent}` : '--', metricLabel: 'emails sent' },
+    { id:'demand',         num:'02', name:'Demand Generation',         desc:'Inbound pipeline, content signals, and MQL routing.', metric: metrics.mqlsThisMonth ?? '--', metricLabel: 'MQLs this month' },
+    { id:'success',        num:'03', name:'Customer Success Engine',   desc:'Health monitoring, churn risk flagging, and expansion tracking.', metric: metrics.atRiskAccounts ?? '--', metricLabel: 'accounts at risk' },
+    { id:'playbook-agent', num:'04', name:'SaaS Growth Playbooks',     desc:'Win/loss analysis, coaching signals, and playbook generation.', metric: metrics.playbookCount ?? '--', metricLabel: 'playbooks' },
   ]
 
   const runs = sum?.recentRuns ?? []
@@ -59,10 +90,10 @@ export default function Dashboard({ active, onNavigate, agentStates, addToast, o
 
       <div className="agent-cards-grid">
         {agentCards.map(a => (
-          <div key={a.id} className={`agent-status-card ${a.live && agentStates[a.id as keyof typeof agentStates] === 'running' ? 'running' : ''}`} onClick={() => a.live && onNavigate(a.id)} style={{ cursor: a.live ? 'pointer' : 'default', opacity: a.live ? 1 : 0.72 }}>
+          <div key={a.id} className={`agent-status-card ${agentStates[a.id as keyof typeof agentStates] === 'running' ? 'running' : ''}`} onClick={() => onNavigate(a.id)} style={{ cursor: 'pointer' }}>
             <div className="agent-card-top">
               <span className="agent-card-num">Agent {a.num}</span>
-              {a.live ? <AgentPill status={agentStates[a.id as keyof typeof agentStates]} /> : <span className="pstatus pstatus-new">Soon</span>}
+              <AgentPill status={agentStates[a.id as keyof typeof agentStates]} />
             </div>
             <div className="agent-card-name">{a.name}</div>
             <div className="agent-card-desc">{a.desc}</div>
@@ -73,12 +104,10 @@ export default function Dashboard({ active, onNavigate, agentStates, addToast, o
               </div>
             </div>
             <div className="agent-card-footer">
-              <span className="agent-last-run">{a.live ? 'Open to manage' : 'In development'}</span>
-              {a.live && (
-                <span className="agent-open-link" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                  Open <Icon name="arrowRight" size={11} />
-                </span>
-              )}
+              <span className="agent-last-run">Open to manage</span>
+              <span className="agent-open-link" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                Open <Icon name="arrowRight" size={11} />
+              </span>
             </div>
           </div>
         ))}
