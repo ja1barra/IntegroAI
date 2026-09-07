@@ -10,17 +10,22 @@
  *
  * Returns: { results: [ { id, subject, body } ] }
  *
- * Requires env var ANTHROPIC_API_KEY. If it is missing the function returns
- * 400 so the client falls back to deterministic mail-merge personalization.
+ * Runs on the signed-in user's own connected AI provider (Anthropic,
+ * OpenAI, Google, or a custom OpenAI-compatible endpoint — see the "AI
+ * Provider" panel in Integrations) if they have one, otherwise falls back
+ * to the server's shared ANTHROPIC_API_KEY. If neither is available the
+ * function returns 400 so the client falls back to deterministic
+ * mail-merge personalization.
  */
+
+import { getAuthedUser, resolveAIProvider, chatComplete } from './_provider.js'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
 }
 
-const MODEL = 'claude-sonnet-5'
 const MAX_PROSPECTS = 25
 
 function buildPrompt(sender, step, p) {
@@ -62,55 +67,13 @@ function parseResult(text, fallbackCompany) {
   return { subject: `Quick idea for ${fallbackCompany || 'your team'}`, body: text.trim() }
 }
 
-// Require a valid signed-in Supabase user so this endpoint can't be used by
-// anyone who finds the URL to spend the shared ANTHROPIC_API_KEY for free.
-async function requireUser(req) {
-  const auth = req.headers.authorization || ''
-  const token = auth.startsWith('Bearer ') ? auth.slice(7) : null
-  if (!token) return false
-  const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL
-  const anonKey = process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY
-  if (!supabaseUrl || !anonKey) return false
-  try {
-    const r = await fetch(`${supabaseUrl.replace(/\/$/, '')}/auth/v1/user`, {
-      headers: { Authorization: `Bearer ${token}`, apikey: anonKey },
-    })
-    return r.ok
-  } catch {
-    return false
-  }
-}
-
-// Sonnet 5 runs adaptive thinking by default — the response's `content`
-// array leads with a `thinking` block (no `.text` field), not the text
-// block, so it must be located by type rather than assumed to be index 0.
-function extractText(data) {
-  const block = Array.isArray(data.content) ? data.content.find(b => b && b.type === 'text') : null
-  return block && typeof block.text === 'string' ? block.text : ''
-}
-
-async function generateOne(apiKey, sender, step, p) {
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-      'content-type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: MODEL,
-      max_tokens: 1200,
-      output_config: { effort: 'low' },
-      system: 'You are an expert B2B SDR who writes concise, highly personalized cold emails that get replies. You always respond with valid JSON only.',
-      messages: [{ role: 'user', content: buildPrompt(sender, step, p) }],
-    }),
+async function generateOne(config, sender, step, p) {
+  const { text } = await chatComplete(config, {
+    system: 'You are an expert B2B SDR who writes concise, highly personalized cold emails that get replies. You always respond with valid JSON only.',
+    prompt: buildPrompt(sender, step, p),
+    maxTokens: 1200,
+    effort: 'low',
   })
-  if (!res.ok) {
-    const errText = await res.text().catch(() => '')
-    throw new Error(`Anthropic API ${res.status}: ${errText.slice(0, 200)}`)
-  }
-  const data = await res.json()
-  const text = extractText(data)
   const parsed = parseResult(text, p.company)
   return { id: p.id, subject: parsed.subject, body: parsed.body }
 }
@@ -120,13 +83,12 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(200).end()
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
-  if (!(await requireUser(req))) {
-    return res.status(401).json({ error: 'Sign in required' })
-  }
+  const auth = await getAuthedUser(req)
+  if (!auth) return res.status(401).json({ error: 'Sign in required' })
 
-  const apiKey = process.env.ANTHROPIC_API_KEY
-  if (!apiKey) {
-    return res.status(400).json({ error: 'ANTHROPIC_API_KEY not configured on the server' })
+  const resolved = await resolveAIProvider(auth)
+  if (!resolved) {
+    return res.status(400).json({ error: 'No AI provider configured — connect your own AI provider in Integrations.' })
   }
 
   const { sender = {}, step = {}, prospects } = req.body ?? {}
@@ -137,8 +99,8 @@ export default async function handler(req, res) {
   const batch = prospects.slice(0, MAX_PROSPECTS)
 
   try {
-    const results = await Promise.all(batch.map(p => generateOne(apiKey, sender, step, p)))
-    return res.status(200).json({ results, model: MODEL })
+    const results = await Promise.all(batch.map(p => generateOne(resolved.config, sender, step, p)))
+    return res.status(200).json({ results, model: resolved.config.model || resolved.config.provider })
   } catch (err) {
     return res.status(500).json({ error: err?.message ?? 'Generation failed' })
   }

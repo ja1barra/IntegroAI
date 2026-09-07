@@ -13,6 +13,7 @@ import { testConnection as testGA4 } from '../lib/integrations/ga4'
 import IntegrationCard from './integrations/IntegrationCard'
 import DetailPanel from './integrations/DetailPanel'
 import ConnectModal from './integrations/ConnectModal'
+import AIProviderPanel from './integrations/AIProviderPanel'
 import { RequestIcon } from './integrations/logos/IntegrationLogos'
 import { Icon } from '../components/ui/Icon'
 import type { Integration, Provider, TestResult } from '../lib/integrations/types'
@@ -295,6 +296,9 @@ export default function IntegrationsView({ active, addToast }: { active: boolean
           </button>
         </div>
       </div>
+
+      {/* AI Provider — bring your own AI */}
+      <AIProviderPanel addToast={addToast} />
 
       {/* Status bar */}
       <div className="card" style={{ padding: '14px 20px', marginBottom: 20, display: 'flex', alignItems: 'center', gap: 0 }}>

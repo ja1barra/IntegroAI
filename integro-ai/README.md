@@ -24,14 +24,32 @@ The working pipeline:
    touch and drops it back into the review queue (skipping anyone who replied).
    Upcoming touches are listed in the Review tab.
 
-Every step degrades gracefully: with no `ANTHROPIC_API_KEY` it falls back to
+Every step degrades gracefully: with no AI provider configured it falls back to
 deterministic mail-merge personalization, and with no mailbox connected sends are
 simulated — so the product is always demoable.
+
+## Bring your own AI
+
+Instead of running every user's generation on Integro's own key, each user can
+connect their own AI provider from the **AI Provider** panel at the top of
+Integrations — Anthropic Claude, OpenAI, Google Gemini, or any
+OpenAI-compatible endpoint (Ollama, LM Studio, OpenRouter, Groq, Azure OpenAI,
+a self-hosted model, etc.). Once connected, `/api/agent/generate` and
+`/api/agent/generate-sequence` run on that user's key and account — Integro is
+never billed for it. The server's `ANTHROPIC_API_KEY` (if set) is only a
+fallback for users who haven't connected their own provider yet. See
+`api/agent/_provider.js` for the provider abstraction and
+`supabase/ai-provider-schema.sql` for where credentials are stored (RLS-scoped
+to each user, same pattern as the CRM integrations below). Web-research
+playbooks currently require the effective provider to be Anthropic (the only
+one wired up with a web-search tool); other providers get a clear error and
+can still generate CRM-grounded playbooks.
 
 ## Setup
 
 1. **Database** — in the Supabase SQL Editor, run `supabase/schema.sql`, then
-   `supabase/outbound-schema.sql`, then `supabase/playbooks-schema.sql` (all idempotent).
+   `supabase/outbound-schema.sql`, then `supabase/playbooks-schema.sql`, then
+   `supabase/ai-provider-schema.sql` (all idempotent).
 2. **Frontend env** — copy `.env.example` → `.env.local` and fill in your
    Supabase URL + anon key.
 3. **Server env (Vercel)** — set the variables in the repo-root `.env.example`

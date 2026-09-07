@@ -1,8 +1,13 @@
 /**
- * AI content-drafting endpoint for two related agents. Kept as one
- * Vercel Serverless Function (rather than a second file) because the
+ * AI content-drafting endpoint for three related, low-traffic jobs. Kept as
+ * one Vercel Serverless Function (rather than separate files) because the
  * Hobby plan caps a deployment at 12 functions — see the "kind" dispatch
  * below.
+ *
+ * All kinds run on the signed-in user's own connected AI provider
+ * (Anthropic, OpenAI, Google, or a custom OpenAI-compatible endpoint — see
+ * the "AI Provider" panel in Integrations) when they have one, otherwise
+ * fall back to the server's shared ANTHROPIC_API_KEY. See api/agent/_provider.js.
  *
  * kind omitted / "sequence" — Outbound Sales Machine (Agent 01):
  *   drafts a full multi-step outbound sequence (subject + body per step,
@@ -18,7 +23,10 @@
  * kind: "playbook" — Growth Playbooks (Agent 04):
  *   drafts a tactical growth playbook either from a CRM win/loss summary
  *   the client already computed (mode: "crm"), or from live web research
- *   via the web_search tool (mode: "web"), returning the sources it found.
+ *   (mode: "web"), returning the sources it found. Web research currently
+ *   requires the effective provider to be Anthropic (the only provider
+ *   wired up with a web-search tool here) — other providers get a clear
+ *   400 telling them to switch modes or connect Anthropic.
  *
  *   POST body:
  *     {
@@ -30,9 +38,17 @@
  *     }
  *   Returns: { playbook: { title, description, category, plays, tags }, sources: [{title,url}], model }
  *
- * Both kinds require env var ANTHROPIC_API_KEY and a signed-in Supabase
- * user (same gate as /api/agent/generate — this also spends the shared key).
+ * kind: "test-provider" — verifies a not-yet-saved AI provider's
+ *   credentials work, for the "Test Connection" button in the AI Provider
+ *   panel. Does not touch the user's saved provider or the shared key.
+ *
+ *   POST body: { kind: "test-provider", provider, apiKey, baseUrl?, model? }
+ *   Returns: { ok: boolean, error?: string, sample?: string }
+ *
+ * All kinds require a signed-in Supabase user.
  */
+
+import { getAuthedUser, resolveAIProvider, chatComplete, SUPPORTED_PROVIDERS } from './_provider.js'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -40,7 +56,6 @@ const CORS = {
   'Access-Control-Allow-Headers': 'Content-Type, Authorization',
 }
 
-const MODEL = 'claude-sonnet-5'
 const MIN_STEPS = 2
 const MAX_STEPS = 6
 
@@ -49,42 +64,6 @@ const PLAYBOOK_CATEGORIES = [
   'Competitive Displacement', 'Onboarding & Activation', 'Expansion & Upsell',
   'Renewal & Retention', 'Win/Loss Response', 'General',
 ]
-
-// Require a valid signed-in Supabase user so this endpoint can't be used by
-// anyone who finds the URL to spend the shared ANTHROPIC_API_KEY for free.
-async function requireUser(req) {
-  const auth = req.headers.authorization || ''
-  const token = auth.startsWith('Bearer ') ? auth.slice(7) : null
-  if (!token) return false
-  const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL
-  const anonKey = process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY
-  if (!supabaseUrl || !anonKey) return false
-  try {
-    const r = await fetch(`${supabaseUrl.replace(/\/$/, '')}/auth/v1/user`, {
-      headers: { Authorization: `Bearer ${token}`, apikey: anonKey },
-    })
-    return r.ok
-  } catch {
-    return false
-  }
-}
-
-async function callAnthropic(apiKey, body) {
-  const aiRes = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-      'content-type': 'application/json',
-    },
-    body: JSON.stringify(body),
-  })
-  if (!aiRes.ok) {
-    const errText = await aiRes.text().catch(() => '')
-    throw new Error(`Anthropic API ${aiRes.status}: ${errText.slice(0, 200)}`)
-  }
-  return aiRes.json()
-}
 
 // ── kind: "sequence" ──────────────────────────────────────────
 
@@ -111,14 +90,6 @@ Respond with ONLY a JSON array, no markdown, no commentary, in exactly this shap
 The array must have exactly ${stepCount} items, in send order.`
 }
 
-// Sonnet 5 runs adaptive thinking by default — the response's `content`
-// array leads with a `thinking` block (no `.text` field), not the text
-// block, so it must be located by type rather than assumed to be index 0.
-function extractText(data) {
-  const block = Array.isArray(data.content) ? data.content.find(b => b && b.type === 'text') : null
-  return block && typeof block.text === 'string' ? block.text : ''
-}
-
 function parseSteps(text, stepCount) {
   if (!text) return null
   let t = text.trim().replace(/^```(?:json)?/i, '').replace(/```$/, '').trim()
@@ -137,7 +108,7 @@ function parseSteps(text, stepCount) {
   })).filter(s => s.body.trim().length > 0)
 }
 
-async function handleSequence(req, res, apiKey) {
+async function handleSequence(req, res, config) {
   const { sender = {}, brief, stepCount } = req.body ?? {}
   if (!brief || !brief.trim()) {
     return res.status(400).json({ error: 'brief is required — describe who you\'re targeting and the angle' })
@@ -145,18 +116,17 @@ async function handleSequence(req, res, apiKey) {
   const count = Math.min(MAX_STEPS, Math.max(MIN_STEPS, Number.isFinite(stepCount) ? Math.round(stepCount) : 3))
 
   try {
-    const data = await callAnthropic(apiKey, {
-      model: MODEL,
-      max_tokens: 4096,
-      output_config: { effort: 'low' },
+    const { text } = await chatComplete(config, {
       system: 'You are an expert B2B SDR who designs high-converting cold outbound sequences. You always respond with valid JSON only.',
-      messages: [{ role: 'user', content: buildSequencePrompt(sender, brief.trim(), count) }],
+      prompt: buildSequencePrompt(sender, brief.trim(), count),
+      maxTokens: 4096,
+      effort: 'low',
     })
-    const steps = parseSteps(extractText(data), count)
+    const steps = parseSteps(text, count)
     if (!steps || steps.length === 0) {
       return res.status(502).json({ error: 'Could not parse a sequence from the AI response — try again' })
     }
-    return res.status(200).json({ steps, model: MODEL })
+    return res.status(200).json({ steps, model: config.model || config.provider })
   } catch (err) {
     return res.status(500).json({ error: err?.message ?? 'Generation failed' })
   }
@@ -206,41 +176,14 @@ After you finish researching, respond with ONLY a JSON object as your final mess
 ${PLAYBOOK_RESPONSE_SHAPE}`
 }
 
-// Server-tool turns interleave text/tool blocks — collect every text block
-// in order rather than assuming the first (or only) block is the answer.
-function extractTextBlocks(data) {
-  if (!Array.isArray(data.content)) return []
-  return data.content.filter(b => b && b.type === 'text' && typeof b.text === 'string').map(b => b.text)
-}
-
-function extractSources(data) {
-  if (!Array.isArray(data.content)) return []
-  const out = []
-  const seen = new Set()
-  for (const block of data.content) {
-    if (!block || block.type !== 'web_search_tool_result') continue
-    const results = Array.isArray(block.content) ? block.content : []
-    for (const r of results) {
-      if (!r || !r.url || seen.has(r.url)) continue
-      seen.add(r.url)
-      out.push({ title: typeof r.title === 'string' ? r.title : r.url, url: r.url })
-    }
-  }
-  return out.slice(0, 6)
-}
-
-function parsePlaybook(textBlocks) {
-  // Try from the last block backwards — the final JSON answer is usually
-  // the last text block, especially after web-search commentary.
-  for (let i = textBlocks.length - 1; i >= 0; i--) {
-    const t = textBlocks[i].trim().replace(/^```(?:json)?/i, '').replace(/```$/, '').trim()
-    if (!t) continue
-    try {
-      const obj = JSON.parse(t)
-      if (obj && typeof obj.title === 'string' && Array.isArray(obj.plays)) return obj
-    } catch {
-      /* try previous block */
-    }
+function parsePlaybook(text) {
+  if (!text) return null
+  const t = text.trim().replace(/^```(?:json)?/i, '').replace(/```$/, '').trim()
+  try {
+    const obj = JSON.parse(t)
+    if (obj && typeof obj.title === 'string' && Array.isArray(obj.plays)) return obj
+  } catch {
+    // fall through
   }
   return null
 }
@@ -266,7 +209,7 @@ function sanitizePlaybook(raw) {
   }
 }
 
-async function handlePlaybook(req, res, apiKey) {
+async function handlePlaybook(req, res, config) {
   const { sender = {}, mode, topic, crmContext } = req.body ?? {}
   if (mode !== 'crm' && mode !== 'web') {
     return res.status(400).json({ error: 'mode must be "crm" or "web"' })
@@ -277,26 +220,25 @@ async function handlePlaybook(req, res, apiKey) {
   if (mode === 'web' && (!topic || !topic.trim())) {
     return res.status(400).json({ error: 'topic is required for mode "web"' })
   }
+  if (mode === 'web' && config.provider !== 'anthropic') {
+    return res.status(400).json({
+      error: 'Web-research playbooks currently require an Anthropic (Claude) AI provider. Use "CRM data" mode instead, or set your AI provider to Anthropic in Integrations.',
+    })
+  }
 
   const prompt = mode === 'crm'
     ? buildCrmPrompt(sender, crmContext, topic)
     : buildWebPrompt(sender, topic)
 
-  const body = {
-    model: MODEL,
-    max_tokens: 4096,
-    output_config: { effort: mode === 'web' ? 'medium' : 'low' },
-    system: 'You are an expert B2B SaaS revenue strategist who writes tactical, evidence-grounded growth playbooks. You always respond with valid JSON only, as your final message.',
-    messages: [{ role: 'user', content: prompt }],
-  }
-  if (mode === 'web') {
-    body.tools = [{ type: 'web_search_20260209', name: 'web_search', max_uses: 5 }]
-  }
-
   try {
-    const data = await callAnthropic(apiKey, body)
-    const textBlocks = extractTextBlocks(data)
-    const raw = parsePlaybook(textBlocks)
+    const { text, sources } = await chatComplete(config, {
+      system: 'You are an expert B2B SaaS revenue strategist who writes tactical, evidence-grounded growth playbooks. You always respond with valid JSON only, as your final message.',
+      prompt,
+      maxTokens: 4096,
+      effort: mode === 'web' ? 'medium' : 'low',
+      webSearch: mode === 'web',
+    })
+    const raw = parsePlaybook(text)
     if (!raw) {
       return res.status(502).json({ error: 'Could not parse a playbook from the AI response — try again' })
     }
@@ -304,10 +246,39 @@ async function handlePlaybook(req, res, apiKey) {
     if (playbook.plays.length === 0) {
       return res.status(502).json({ error: 'AI returned no usable plays — try rephrasing and generate again' })
     }
-    const sources = mode === 'web' ? extractSources(data) : []
-    return res.status(200).json({ playbook, sources, model: MODEL })
+    return res.status(200).json({ playbook, sources: mode === 'web' ? sources : [], model: config.model || config.provider })
   } catch (err) {
     return res.status(500).json({ error: err?.message ?? 'Generation failed' })
+  }
+}
+
+// ── kind: "test-provider" ────────────────────────────────────
+
+async function handleTestProvider(req, res) {
+  const { provider, apiKey, baseUrl, model } = req.body ?? {}
+  if (!provider || !apiKey) {
+    return res.status(400).json({ error: 'provider and apiKey are required' })
+  }
+  if (!SUPPORTED_PROVIDERS.includes(provider)) {
+    return res.status(400).json({ error: `Unsupported provider: ${provider}` })
+  }
+  if (provider === 'custom' && !baseUrl) {
+    return res.status(400).json({ error: 'A base URL is required for a custom provider' })
+  }
+
+  const config = { provider, apiKey, baseUrl: baseUrl || undefined, model: model || undefined }
+
+  try {
+    const { text } = await chatComplete(config, {
+      system: 'Reply with exactly one word and nothing else.',
+      prompt: 'Reply with only the word: OK',
+      maxTokens: 20,
+      effort: 'low',
+    })
+    const ok = typeof text === 'string' && text.trim().length > 0
+    return res.status(200).json({ ok, sample: ok ? text.trim().slice(0, 40) : undefined, error: ok ? undefined : 'AI provider returned an empty response' })
+  } catch (err) {
+    return res.status(200).json({ ok: false, error: err?.message ?? 'Connection test failed' })
   }
 }
 
@@ -318,15 +289,16 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(200).end()
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
-  if (!(await requireUser(req))) {
-    return res.status(401).json({ error: 'Sign in required' })
+  const auth = await getAuthedUser(req)
+  if (!auth) return res.status(401).json({ error: 'Sign in required' })
+
+  if (req.body?.kind === 'test-provider') return handleTestProvider(req, res)
+
+  const resolved = await resolveAIProvider(auth)
+  if (!resolved) {
+    return res.status(400).json({ error: 'No AI provider configured — connect your own AI provider in Integrations.' })
   }
 
-  const apiKey = process.env.ANTHROPIC_API_KEY
-  if (!apiKey) {
-    return res.status(400).json({ error: 'ANTHROPIC_API_KEY not configured on the server' })
-  }
-
-  if (req.body?.kind === 'playbook') return handlePlaybook(req, res, apiKey)
-  return handleSequence(req, res, apiKey)
+  if (req.body?.kind === 'playbook') return handlePlaybook(req, res, resolved.config)
+  return handleSequence(req, res, resolved.config)
 }
