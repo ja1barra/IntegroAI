@@ -1,20 +1,15 @@
-import { useState } from 'react'
 import type { User } from '../../types'
-import UserMenu from './UserMenu'
 import { Icon } from '../ui/Icon'
+import IntegroLogo from '../ui/IntegroLogo'
 
 interface Props {
   user: User
-  onLogout: () => void
-  onNavigate: (v: string) => void
   onToggleNotif: () => void
   notifOpen: boolean
   children?: React.ReactNode
 }
 
-export default function AppHeader({ user, onLogout, onNavigate, onToggleNotif, notifOpen, children }: Props) {
-  const [menuOpen, setMenuOpen] = useState(false)
-
+export default function AppHeader({ user, onToggleNotif, notifOpen, children }: Props) {
   return (
     <header className="app-header">
       <div className="app-logo">INTEGRO AI <span className="brand-tag">Beta</span></div>
@@ -29,23 +24,16 @@ export default function AppHeader({ user, onLogout, onNavigate, onToggleNotif, n
           {notifOpen && children}
         </div>
 
-        <div style={{ position: 'relative' }}>
-          <div
-            className="header-avatar"
-            title="Account"
-            onClick={e => { e.stopPropagation(); setMenuOpen(p => !p) }}
-          >
-            {user.initials}
-          </div>
-          {menuOpen && (
-            <UserMenu
-              user={user}
-              onNavigate={v => { onNavigate(v); setMenuOpen(false) }}
-              onLogout={onLogout}
-              onClose={() => setMenuOpen(false)}
-            />
-          )}
-        </div>
+        <a
+          href="https://getintegro.com"
+          target="_blank"
+          rel="noreferrer"
+          className="header-avatar"
+          title="Integro Solutions"
+          style={{ padding: 0, overflow: 'hidden' }}
+        >
+          <IntegroLogo size={34} />
+        </a>
       </div>
     </header>
   )
