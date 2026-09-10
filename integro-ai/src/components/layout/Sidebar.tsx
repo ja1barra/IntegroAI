@@ -14,12 +14,15 @@ interface Props {
 
 type NavItem = { id: string; icon: IconName; label: string; agent?: boolean; color?: string }
 
-const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
-  { label: 'Overview', items: [
-    { id: 'dashboard',      icon: 'dashboard',       label: 'Dashboard' },
-    { id: 'tasks',          icon: 'tasks',           label: 'Tasks' },
-    { id: 'playbooks',      icon: 'playbook',        label: 'Playbooks' },
-    { id: 'reports',        icon: 'reports',         label: 'Reports' },
+// The "Settings" group has no label and renders in a quieter style, tucked
+// above the account footer — Integrations/Team/Settings are account-level
+// utilities a user reaches for occasionally, not a workflow they scan daily,
+// so they shouldn't compete visually with Workspace/Agents.
+const NAV_GROUPS: { label?: string; quiet?: boolean; items: NavItem[] }[] = [
+  { label: 'Workspace', items: [
+    { id: 'dashboard', icon: 'dashboard', label: 'Dashboard' },
+    { id: 'tasks',     icon: 'tasks',     label: 'Tasks' },
+    { id: 'reports',   icon: 'reports',   label: 'Reports' },
   ]},
   { label: 'Agents', items: [
     { id: 'outbound',       icon: 'outbound',        label: 'Outbound Sales',   agent: true, color: '#3ecf8e' },
@@ -27,7 +30,7 @@ const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
     { id: 'success',        icon: 'customerSuccess', label: 'Customer Success', agent: true, color: '#4d9de0' },
     { id: 'playbook-agent', icon: 'openBook',         label: 'Growth Playbooks', agent: true, color: '#9b59b6' },
   ]},
-  { label: 'Settings', items: [
+  { quiet: true, items: [
     { id: 'integrations', icon: 'integrations', label: 'Integrations' },
     { id: 'team',         icon: 'team',         label: 'Team' },
     { id: 'settings',     icon: 'settings',     label: 'Settings' },
@@ -39,9 +42,9 @@ export default function Sidebar({ view, setView, agentStates, user, onLogout }: 
 
   return (
     <aside className="sidebar">
-      {NAV_GROUPS.map(g => (
-        <div key={g.label} className="sidebar-section">
-          <div className="sidebar-label">{g.label}</div>
+      {NAV_GROUPS.map((g, i) => (
+        <div key={g.label ?? `group-${i}`} className={`sidebar-section ${g.quiet ? 'sidebar-section-quiet' : ''}`}>
+          {g.label && <div className="sidebar-label">{g.label}</div>}
           {g.items.map(item => (
             <div
               key={item.id}

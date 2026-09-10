@@ -13,11 +13,12 @@ interface Props {
   onLogout: () => void
 }
 
-type Tab = 'profile' | 'appearance' | 'notifications' | 'security'
+type Tab = 'profile' | 'appearance' | 'white-label' | 'notifications' | 'security'
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'profile',       label: 'Profile' },
   { id: 'appearance',    label: 'Appearance' },
+  { id: 'white-label',   label: 'White Label' },
   { id: 'notifications', label: 'Notifications' },
   { id: 'security',      label: 'Account & Security' },
 ]
@@ -268,6 +269,203 @@ function AppearanceTab({ tweaks, setTweak }: { tweaks: Tweaks; setTweak: Props['
   )
 }
 
+// ── White Label ──────────────────────────────────────────────
+// Workspace-level branding — not a per-user preference like Appearance, so
+// it isn't wired into `tweaks`/Supabase yet. State here is local to the
+// tab; domain verification is simulated so the page stays demoable without
+// a DNS backend, matching how the rest of the app degrades gracefully.
+
+function LogoUploadRow({ label, hint, dark, onUpload }: { label: string; hint: string; dark?: boolean; onUpload: () => void }) {
+  return (
+    <Row label={label} hint={hint}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <div style={{
+          width: 96, height: 36, borderRadius: 'var(--radius-sm)', flexShrink: 0,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontFamily: "'Bebas Neue',sans-serif", fontSize: 13, letterSpacing: '0.03em',
+          background: dark ? '#211c17' : 'rgba(255,255,255,0.55)',
+          color: dark ? '#f0ece4' : 'var(--ink-m)',
+          border: dark ? '1px solid rgba(255,255,255,0.14)' : '1px dashed rgba(26,23,20,0.18)',
+        }}>
+          {dark ? 'LOGO' : 'LOGO'}
+        </div>
+        <button className="btn-sm btn-sm-ghost" onClick={onUpload}>Upload</button>
+      </div>
+    </Row>
+  )
+}
+
+function WhiteLabelTab({ user, addToast }: { user: User; addToast: Props['addToast'] }) {
+  const [primaryColor, setPrimaryColor] = useState('#0EA5A0')
+  const [inkColor, setInkColor] = useState('#1A1714')
+  const [fontChoice, setFontChoice] = useState<'sans' | 'inter' | 'custom'>('sans')
+  const [customFont, setCustomFont] = useState('Sora')
+  const [domain, setDomain] = useState('')
+  const [domainStatus, setDomainStatus] = useState<'unset' | 'pending' | 'verified'>('unset')
+  const [poweredBy, setPoweredBy] = useState(true)
+  const [saving, setSaving] = useState(false)
+
+  const handleUpload = (label: string) => addToast(`${label} upload — coming soon`)
+
+  const handleVerify = () => {
+    if (!domain.trim()) return
+    setDomainStatus('pending')
+    setTimeout(() => { setDomainStatus('verified'); addToast('Domain verified (simulated for this preview)') }, 1400)
+  }
+
+  const handleSave = () => {
+    setSaving(true)
+    setTimeout(() => { setSaving(false); addToast('Branding saved — this preview isn’t persisted to your workspace yet') }, 400)
+  }
+
+  const previewFont = fontChoice === 'sans' ? "'DM Sans', sans-serif" : fontChoice === 'inter' ? "'Inter', sans-serif" : `'${customFont || 'Sora'}', sans-serif`
+
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: 20, alignItems: 'start' }}>
+      <div>
+        <SectionCard title="Brand identity" subtitle="Replace the Integro AI mark with your own across the sidebar, sign-in screen, and browser tab.">
+          <LogoUploadRow label="Logo — light backgrounds" hint="SVG or PNG, transparent background. 240×60px recommended." onUpload={() => handleUpload('Light logo')} />
+          <LogoUploadRow label="Logo — dark backgrounds" hint="Used when your workspace is set to dark mode." dark onUpload={() => handleUpload('Dark logo')} />
+          <Row label="Favicon" hint="32×32px. Shown in the browser tab and bookmarks.">
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <div style={{ width: 32, height: 32, borderRadius: 8, background: primaryColor, flexShrink: 0 }} />
+              <button className="btn-sm btn-sm-ghost" onClick={() => handleUpload('Favicon')}>Upload</button>
+            </div>
+          </Row>
+        </SectionCard>
+
+        <SectionCard title="Brand colors" subtitle="Sets the accent used for buttons, links, active nav states, and status highlights.">
+          <Row label="Primary accent" hint="Falls back to Integro's default orange (#D4501A) until set.">
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <div style={{ width: 32, height: 32, borderRadius: 9, background: primaryColor, boxShadow: 'inset 0 0 0 1px rgba(26,23,20,0.12)', flexShrink: 0 }} />
+              <input className="form-input" style={{ width: 110, padding: '8px 10px', fontFamily: "'DM Mono',monospace", fontSize: 12 }} value={primaryColor} onChange={e => setPrimaryColor(e.target.value)} />
+            </div>
+          </Row>
+          <Row label="Ink / text tone" hint="Base text and dark-surface color across the workspace.">
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <div style={{ width: 32, height: 32, borderRadius: 9, background: inkColor, boxShadow: 'inset 0 0 0 1px rgba(26,23,20,0.12)', flexShrink: 0 }} />
+              <input className="form-input" style={{ width: 110, padding: '8px 10px', fontFamily: "'DM Mono',monospace", fontSize: 12 }} value={inkColor} onChange={e => setInkColor(e.target.value)} />
+            </div>
+          </Row>
+        </SectionCard>
+
+        <SectionCard title="Typography" subtitle="Choose a built-in face, or load any Google Font by name.">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {[
+              { id: 'sans' as const,  label: 'DM Sans — default', preview: "'DM Sans', sans-serif" },
+              { id: 'inter' as const, label: 'Inter',             preview: "'Inter', sans-serif" },
+            ].map(f => (
+              <div
+                key={f.id}
+                onClick={() => setFontChoice(f.id)}
+                style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer',
+                  padding: '10px 14px', borderRadius: 'var(--radius-sm)',
+                  border: `1px solid ${fontChoice === f.id ? 'var(--orange)' : 'var(--rule)'}`,
+                  background: fontChoice === f.id ? 'rgba(212,80,26,0.06)' : 'transparent',
+                }}
+              >
+                <span style={{ fontFamily: f.preview, fontSize: 14 }}>{f.label} — The quick brown fox</span>
+                {fontChoice === f.id && <Icon name="check" size={13} style={{ color: 'var(--orange)' }} />}
+              </div>
+            ))}
+            <div
+              onClick={() => setFontChoice('custom')}
+              style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, cursor: 'pointer',
+                padding: '10px 14px', borderRadius: 'var(--radius-sm)',
+                border: `1px solid ${fontChoice === 'custom' ? 'var(--orange)' : 'var(--rule)'}`,
+                background: fontChoice === 'custom' ? 'rgba(212,80,26,0.06)' : 'transparent',
+              }}
+            >
+              <span style={{ fontFamily: previewFont, fontSize: 14, flex: 1 }}>{customFont || 'Custom'} — custom Google Font</span>
+              <input
+                className="form-input"
+                style={{ width: 130, padding: '6px 10px', fontSize: 12 }}
+                value={customFont}
+                onClick={e => e.stopPropagation()}
+                onChange={e => setCustomFont(e.target.value)}
+              />
+              {fontChoice === 'custom' && <Icon name="check" size={13} style={{ color: 'var(--orange)' }} />}
+            </div>
+          </div>
+        </SectionCard>
+
+        <SectionCard title="Custom domain" subtitle="Serve the workspace from your own domain instead of app.integroai.com.">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: domainStatus !== 'unset' ? 12 : 0 }}>
+            <input className="form-input" style={{ flex: 1 }} placeholder="app.yourcompany.com" value={domain} onChange={e => setDomain(e.target.value)} />
+            <button className="btn-sm btn-sm-ghost" onClick={handleVerify} disabled={!domain.trim() || domainStatus === 'pending'}>
+              {domainStatus === 'pending' ? 'Verifying…' : 'Verify'}
+            </button>
+            {domainStatus === 'pending' && (
+              <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 9, letterSpacing: '0.06em', textTransform: 'uppercase', padding: '4px 10px', borderRadius: 'var(--radius-pill)', background: 'rgba(245,166,35,0.15)', color: '#c47d00', border: '1px solid rgba(245,166,35,0.25)', whiteSpace: 'nowrap' }}>Pending DNS</span>
+            )}
+            {domainStatus === 'verified' && (
+              <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 9, letterSpacing: '0.06em', textTransform: 'uppercase', padding: '4px 10px', borderRadius: 'var(--radius-pill)', background: 'rgba(16,185,129,0.16)', color: '#059669', border: '1px solid rgba(16,185,129,0.3)', whiteSpace: 'nowrap' }}>Verified</span>
+            )}
+          </div>
+          {domainStatus !== 'unset' && domain && (
+            <div style={{ padding: '12px 14px', borderRadius: 'var(--radius-sm)', background: 'rgba(26,23,20,0.04)', border: '1px solid var(--rule)', fontFamily: "'DM Mono',monospace", fontSize: 11, color: 'var(--ink-m)', lineHeight: 1.7 }}>
+              Add a <strong style={{ color: 'var(--ink)' }}>CNAME</strong> record: <strong style={{ color: 'var(--ink)' }}>{domain}</strong> → <strong style={{ color: 'var(--ink)' }}>clients.integroai.com</strong><br />
+              Verification above is simulated for this preview — DNS changes normally take up to 24 hours to propagate.
+            </div>
+          )}
+        </SectionCard>
+
+        <SectionCard title="Plan">
+          <Row label={'"Powered by Integro AI" badge'} hint="Shown in the footer on the free plan. Included in Agency and Enterprise white-label plans.">
+            <Toggle enabled={poweredBy} onChange={() => setPoweredBy(p => !p)} />
+          </Row>
+        </SectionCard>
+
+        <button className="btn-sm btn-sm-primary" onClick={handleSave} disabled={saving}>
+          {saving ? <span className="btn-loading"><span />Saving...</span> : 'Save Changes'}
+        </button>
+      </div>
+
+      <div style={{ position: 'sticky', top: 0 }}>
+        <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 9, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--ink-l)', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 7 }}>
+          <span style={{ width: 6, height: 6, borderRadius: '50%', background: primaryColor, boxShadow: `0 0 5px ${primaryColor}99` }} />
+          Live Preview
+        </div>
+        <div style={{ borderRadius: 'var(--radius)', border: '1px solid var(--glass-border)', boxShadow: 'var(--glass-shadow)', overflow: 'hidden', background: '#fdfaf4' }}>
+          <div style={{ height: 38, background: 'rgba(245,240,232,0.9)', borderBottom: '1px solid rgba(255,255,255,0.6)', display: 'flex', alignItems: 'center', padding: '0 14px' }}>
+            <span style={{ fontFamily: previewFont, fontWeight: 600, fontSize: 13, color: inkColor }}>{user.org || 'Your Workspace'}</span>
+          </div>
+          <div style={{ display: 'flex', height: 260 }}>
+            <div style={{ width: 96, background: 'rgba(245,240,232,0.6)', borderRight: '1px solid rgba(255,255,255,0.5)', padding: '12px 8px', display: 'flex', flexDirection: 'column', gap: 5, flexShrink: 0 }}>
+              {['Outbound', 'Demand Gen', 'Success', 'Playbooks'].map((n, i) => (
+                <div key={n} style={{
+                  fontSize: 9.5, padding: '6px 8px', borderRadius: 6,
+                  background: i === 0 ? primaryColor : 'transparent',
+                  color: i === 0 ? '#fff' : 'var(--ink-m)', fontWeight: i === 0 ? 500 : 400,
+                }}>{n}</div>
+              ))}
+            </div>
+            <div style={{ flex: 1, padding: 14 }}>
+              {[{ l: 'In Sequence', v: '428' }, { l: 'Reply Rate', v: '18%' }].map(s => (
+                <div key={s.l} style={{ background: 'rgba(255,255,255,0.6)', border: '1px solid rgba(255,255,255,0.7)', borderRadius: 8, padding: '10px 12px', marginBottom: 8 }}>
+                  <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 7.5, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--ink-l)', marginBottom: 5 }}>{s.l}</div>
+                  <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 20, color: inkColor }}>{s.v}</div>
+                </div>
+              ))}
+              <span style={{ display: 'inline-block', marginTop: 4, padding: '6px 14px', borderRadius: 100, background: primaryColor, color: '#fff', fontSize: 10, fontWeight: 500 }}>+ New Sequence</span>
+            </div>
+          </div>
+          {poweredBy && (
+            <div style={{ height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(245,240,232,0.5)', borderTop: '1px solid rgba(255,255,255,0.5)', fontFamily: "'DM Mono',monospace", fontSize: 8.5, letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--ink-l)', opacity: 0.55 }}>
+              Powered by Integro AI
+            </div>
+          )}
+        </div>
+        <div style={{ fontSize: 12, color: 'var(--ink-l)', marginTop: 10, padding: '0 2px', lineHeight: 1.5 }}>
+          Updates as you edit the settings on the left — this is what {domain || 'your custom domain'} will look like for your team.
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── Notifications ────────────────────────────────────────────
 
 function NotificationsTab({ tweaks, setTweak, addToast }: { tweaks: Tweaks; setTweak: Props['setTweak']; addToast: Props['addToast'] }) {
@@ -400,9 +598,10 @@ export default function SettingsView({ active, user, tweaks, setTweak, addToast,
         ))}
       </div>
 
-      <div style={{ maxWidth: 620 }}>
+      <div style={{ maxWidth: tab === 'white-label' ? 1040 : 620 }}>
         {tab === 'profile' && <ProfileTab user={user} addToast={addToast} />}
         {tab === 'appearance' && <AppearanceTab tweaks={tweaks} setTweak={setTweak} />}
+        {tab === 'white-label' && <WhiteLabelTab user={user} addToast={addToast} />}
         {tab === 'notifications' && <NotificationsTab tweaks={tweaks} setTweak={setTweak} addToast={addToast} />}
         {tab === 'security' && <SecurityTab addToast={addToast} onLogout={onLogout} />}
       </div>
