@@ -21,7 +21,7 @@ import SettingsView from './views/SettingsView'
 import AcademyView from './views/AcademyView'
 import { useTasks } from './hooks/useTasks'
 import { usePlaybooks } from './hooks/usePlaybooks'
-import type { User, AgentStates, AgentId, Toast, Tweaks, Task } from './types'
+import type { User, AgentStates, AgentId, Toast, Tweaks, Task, WhiteLabel } from './types'
 import type { Playbook } from './lib/playbooks/types'
 
 const DEFAULT_AGENT_STATES: AgentStates = { outbound: 'running', demand: 'running', success: 'running', 'playbook-agent': 'running' }
@@ -54,6 +54,18 @@ const FONT_STACKS: Record<Tweaks['fontFamily'], string> = {
   serif:  "'Lora', Georgia, 'Times New Roman', serif",
   mono:   "'DM Mono', monospace",
   system: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif",
+}
+
+// Darkens a #rrggbb hex color by `amount` (0-1) for a hover shade — used for
+// a white-labeled workspace's custom accent, mirroring the hand-picked
+// hover shades in ACCENTS above.
+function darkenHex(hex: string, amount: number): string {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim())
+  if (!m) return hex
+  const n = parseInt(m[1], 16)
+  const clamp = (c: number) => Math.max(0, Math.min(255, Math.round(c * (1 - amount))))
+  const r = clamp((n >> 16) & 255), g = clamp((n >> 8) & 255), b = clamp(n & 255)
+  return `#${((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1)}`
 }
 
 // Older saved settings only ever had a `darkMode` boolean and no
@@ -90,6 +102,8 @@ export default function AppShell({ user, userId, onLogout }: { user: User; userI
   const [toasts, setToasts] = useState<Toast[]>([])
   const [tweaks, setTweaksState] = useState<Tweaks>(DEFAULT_TWEAKS)
   const [settingsReady, setSettingsReady] = useState(false)
+  const [branding, setBranding] = useState<WhiteLabel | null>(null)
+  const [brandingReady, setBrandingReady] = useState(false)
 
   const agentStatesRef = useRef(agentStates)
   const tweaksRef = useRef(tweaks)
@@ -145,6 +159,31 @@ export default function AppShell({ user, userId, onLogout }: { user: User; userI
       })
   }, [userId, addToast])
 
+  // Load white-label branding on mount. Unlike tweaks (auto-saved as you
+  // change them), branding only changes when Settings > White Label calls
+  // `setBranding` after a successful save (see the render below) — this
+  // effect only needs to run once, to hydrate the app on open.
+  useEffect(() => {
+    (async () => {
+      try {
+        const { data, error } = await supabase
+          .from('white_label_settings')
+          .select('light_logo_url, dark_logo_url, favicon_url, primary_color, ink_color, font_choice, custom_font_name, custom_domain, domain_status, powered_by_badge')
+          .eq('user_id', userId)
+          .maybeSingle()
+        if (error) addToast('Could not load your branding settings', 'error')
+        else setBranding(data as WhiteLabel | null)
+      } catch {
+        // A network-level failure (backend unreachable) throws rather than
+        // resolving with `error` — without this, White Label would be stuck
+        // on "Loading…" forever instead of falling back to unbranded.
+        addToast('Could not load your branding settings', 'error')
+      } finally {
+        setBrandingReady(true)
+      }
+    })()
+  }, [userId, addToast])
+
   // Debounced persist — 1 second after last change
   const persistTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   useEffect(() => {
@@ -183,19 +222,30 @@ export default function AppShell({ user, userId, onLogout }: { user: User; userI
   }, [])
   const effectiveDark = tweaks.theme === 'dark' || (tweaks.theme === 'system' && systemDark)
 
-  // Apply tweaks to DOM
+  // Apply tweaks to DOM — a workspace's white-label branding (when set)
+  // takes precedence over the personal accent/font tweaks above, same as
+  // any branded product overrides an individual's local preferences.
   useEffect(() => {
     document.body.classList.toggle('dark', effectiveDark)
 
     const [a, ah] = ACCENTS[tweaks.accentColor] ?? ACCENTS.orange
-    document.documentElement.style.setProperty('--orange', a)
-    document.documentElement.style.setProperty('--orange-h', ah)
+    const accent = branding?.primary_color || a
+    const accentHover = branding?.primary_color ? darkenHex(branding.primary_color, 0.12) : ah
+    document.documentElement.style.setProperty('--orange', accent)
+    document.documentElement.style.setProperty('--orange-h', accentHover)
+
+    if (branding?.ink_color) {
+      document.documentElement.style.setProperty('--ink', branding.ink_color)
+    }
 
     const [headerH, sidebarW] = DENSITIES[tweaks.density] ?? DENSITIES.default
     document.documentElement.style.setProperty('--header-h', headerH)
     document.documentElement.style.setProperty('--sidebar-w', sidebarW)
 
-    document.body.style.setProperty('--font-body', FONT_STACKS[tweaks.fontFamily] ?? FONT_STACKS.sans)
+    let fontStack = FONT_STACKS[tweaks.fontFamily] ?? FONT_STACKS.sans
+    if (branding?.font_choice === 'inter') fontStack = FONT_STACKS.inter
+    else if (branding?.font_choice === 'custom' && branding.custom_font_name) fontStack = `'${branding.custom_font_name}', sans-serif`
+    document.body.style.setProperty('--font-body', fontStack)
 
     // Glass opacity — set on body (not documentElement) so the inline style
     // wins over the `body.dark { --glass: ... }` rule in index.css, which
@@ -226,10 +276,51 @@ export default function AppShell({ user, userId, onLogout }: { user: User; userI
       document.body.style.removeProperty('--modal-glass')
       document.documentElement.style.removeProperty('--orange')
       document.documentElement.style.removeProperty('--orange-h')
+      document.documentElement.style.removeProperty('--ink')
       document.documentElement.style.removeProperty('--header-h')
       document.documentElement.style.removeProperty('--sidebar-w')
     }
-  }, [tweaks, effectiveDark])
+  }, [tweaks, effectiveDark, branding])
+
+  // Favicon + a custom Google Font, when white-labeled — neither is a CSS
+  // custom property, so these live outside the effect above. Gated on
+  // brandingReady so a still-loading fetch doesn't briefly show/remove the
+  // default favicon before the real branding (or lack of it) is known.
+  useEffect(() => {
+    if (!brandingReady) return
+    const id = 'white-label-favicon'
+    let link = document.getElementById(id) as HTMLLinkElement | null
+    if (branding?.favicon_url) {
+      if (!link) {
+        link = document.createElement('link')
+        link.id = id
+        link.rel = 'icon'
+        document.head.appendChild(link)
+      }
+      link.href = branding.favicon_url
+    } else if (link) {
+      link.remove()
+    }
+  }, [brandingReady, branding?.favicon_url])
+
+  useEffect(() => {
+    if (!brandingReady) return
+    const id = 'white-label-font'
+    let link = document.getElementById(id) as HTMLLinkElement | null
+    if (branding?.font_choice === 'custom' && branding.custom_font_name) {
+      const family = branding.custom_font_name.trim().replace(/\s+/g, '+')
+      const href = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(family)}:wght@400;500;600&display=swap`
+      if (!link) {
+        link = document.createElement('link')
+        link.id = id
+        link.rel = 'stylesheet'
+        document.head.appendChild(link)
+      }
+      link.href = href
+    } else if (link) {
+      link.remove()
+    }
+  }, [brandingReady, branding?.font_choice, branding?.custom_font_name])
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') setNotifOpen(false) }
@@ -239,14 +330,26 @@ export default function AppShell({ user, userId, onLogout }: { user: User; userI
 
   const sharedProps = { agentStates, toggleAgent, addToast }
 
+  // Prefer the logo matching the current theme, falling back to the other
+  // one if only a single logo was uploaded.
+  const headerLogoUrl = effectiveDark
+    ? (branding?.dark_logo_url || branding?.light_logo_url)
+    : (branding?.light_logo_url || branding?.dark_logo_url)
+  // Unbranded installs (no row yet) keep today's attribution unchanged; a
+  // workspace that has set up branding can turn it off via the badge toggle.
+  const poweredByVisible = !branding || branding.powered_by_badge
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
-      <AppHeader user={user} onToggleNotif={() => setNotifOpen(p => !p)} notifOpen={notifOpen}>
+      <AppHeader user={user} onToggleNotif={() => setNotifOpen(p => !p)} notifOpen={notifOpen} logoUrl={headerLogoUrl} poweredByVisible={poweredByVisible}>
         <NotificationPanel />
       </AppHeader>
 
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-        <Sidebar view={view} setView={(v) => { setView(v); setNotifOpen(false) }} agentStates={agentStates} user={user} onLogout={onLogout} />
+        <Sidebar
+          view={view} setView={(v) => { setView(v); setNotifOpen(false) }} agentStates={agentStates} user={user} onLogout={onLogout}
+          poweredByVisible={!!branding && branding.powered_by_badge}
+        />
 
         <main className="main" onClick={() => setNotifOpen(false)}>
           <Dashboard         active={view === 'dashboard'}       onNavigate={setView} onNewTask={() => openTaskModal()} {...sharedProps} />
@@ -264,7 +367,10 @@ export default function AppShell({ user, userId, onLogout }: { user: User; userI
           <ReportsView       active={view === 'reports'}          addToast={addToast} />
           <IntegrationsView  active={view === 'integrations'}     addToast={addToast} />
           <TeamView          active={view === 'team'}             addToast={addToast} user={user} />
-          <SettingsView      active={view === 'settings'}         user={user} userId={userId} tweaks={tweaks} setTweak={setTweak} addToast={addToast} onLogout={onLogout} />
+          <SettingsView
+            active={view === 'settings'} user={user} userId={userId} tweaks={tweaks} setTweak={setTweak} addToast={addToast} onLogout={onLogout}
+            branding={branding} brandingReady={brandingReady} onBrandingSaved={setBranding}
+          />
           <AcademyView       active={view === 'academy'} />
         </main>
       </div>

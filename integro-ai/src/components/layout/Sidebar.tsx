@@ -11,6 +11,7 @@ interface Props {
   agentStates: AgentStates
   user: User
   onLogout: () => void
+  poweredByVisible?: boolean
 }
 
 type NavItem = { id: string; icon: IconName; label: string; agent?: boolean; color?: string }
@@ -38,7 +39,7 @@ const NAV_GROUPS: { label?: string; quiet?: boolean; items: NavItem[] }[] = [
   ]},
 ]
 
-export default function Sidebar({ view, setView, agentStates, user, onLogout }: Props) {
+export default function Sidebar({ view, setView, agentStates, user, onLogout, poweredByVisible }: Props) {
   const [menuOpen, setMenuOpen] = useState(false)
 
   return (
@@ -64,6 +65,14 @@ export default function Sidebar({ view, setView, agentStates, user, onLogout }: 
           ))}
         </div>
       ))}
+
+      {poweredByVisible && (
+        <div style={{ padding: '10px 12px 0', textAlign: 'center' }}>
+          <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 8.5, letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--ink-l)', opacity: 0.6 }}>
+            Powered by Integro AI
+          </span>
+        </div>
+      )}
 
       <div className="sidebar-footer" style={{ position: 'relative' }}>
         {menuOpen && (

@@ -7,12 +7,18 @@ interface Props {
   onToggleNotif: () => void
   notifOpen: boolean
   children?: React.ReactNode
+  logoUrl?: string | null
+  poweredByVisible?: boolean
 }
 
-export default function AppHeader({ user, onToggleNotif, notifOpen, children }: Props) {
+export default function AppHeader({ user, onToggleNotif, notifOpen, children, logoUrl, poweredByVisible = true }: Props) {
   return (
     <header className="app-header">
-      <div className="app-logo">INTEGRO AI <span className="brand-tag">Beta</span></div>
+      {logoUrl ? (
+        <img src={logoUrl} alt="" style={{ height: 22, maxWidth: 160, objectFit: 'contain' }} />
+      ) : (
+        <div className="app-logo">INTEGRO AI <span className="brand-tag">Beta</span></div>
+      )}
       <div className="header-sep" />
       <span className="header-org">{user.org}</span>
       <div className="header-right">
@@ -24,16 +30,18 @@ export default function AppHeader({ user, onToggleNotif, notifOpen, children }: 
           {notifOpen && children}
         </div>
 
-        <a
-          href="https://getintegro.com"
-          target="_blank"
-          rel="noreferrer"
-          className="header-avatar"
-          title="Integro Solutions"
-          style={{ padding: 0, overflow: 'hidden' }}
-        >
-          <IntegroLogo size={34} />
-        </a>
+        {poweredByVisible && (
+          <a
+            href="https://getintegro.com"
+            target="_blank"
+            rel="noreferrer"
+            className="header-avatar"
+            title="Integro Solutions"
+            style={{ padding: 0, overflow: 'hidden' }}
+          >
+            <IntegroLogo size={34} />
+          </a>
+        )}
       </div>
     </header>
   )

@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase'
 import { Icon } from '../components/ui/Icon'
 import Toggle from '../components/ui/Toggle'
 import Avatar from '../components/ui/Avatar'
-import type { User, Tweaks, AccentColor, ThemeMode, DensityMode, FontFamily } from '../types'
+import type { User, Tweaks, AccentColor, ThemeMode, DensityMode, FontFamily, WhiteLabel } from '../types'
 
 const MAX_AVATAR_BYTES = 5 * 1024 * 1024
 const MAX_LOGO_BYTES = 2 * 1024 * 1024
@@ -16,6 +16,9 @@ interface Props {
   setTweak: (key: keyof Tweaks, value: Tweaks[keyof Tweaks]) => void
   addToast: (m: string, t?: 'success' | 'error') => void
   onLogout: () => void
+  branding: WhiteLabel | null
+  brandingReady: boolean
+  onBrandingSaved: (b: WhiteLabel) => void
 }
 
 type Tab = 'profile' | 'appearance' | 'white-label' | 'notifications' | 'security'
@@ -343,18 +346,6 @@ function AppearanceTab({ tweaks, setTweak }: { tweaks: Tweaks; setTweak: Props['
 // verification itself stays simulated (no DNS backend), but the
 // verified/pending status is real and persists like everything else here.
 
-interface WhiteLabelRow {
-  light_logo_url: string | null
-  dark_logo_url: string | null
-  favicon_url: string | null
-  primary_color: string
-  ink_color: string
-  font_choice: 'sans' | 'inter' | 'custom'
-  custom_font_name: string | null
-  custom_domain: string | null
-  domain_status: 'unset' | 'pending' | 'verified'
-  powered_by_badge: boolean
-}
 
 function LogoUploadRow({ label, hint, dark, imageUrl, busy, onFile, onRemove }: {
   label: string
@@ -401,8 +392,14 @@ function LogoUploadRow({ label, hint, dark, imageUrl, busy, onFile, onRemove }: 
   )
 }
 
-function WhiteLabelTab({ user, userId, addToast }: { user: User; userId: string; addToast: Props['addToast'] }) {
-  const [loaded, setLoaded] = useState(false)
+function WhiteLabelTab({ user, userId, addToast, branding, brandingReady, onSaved }: {
+  user: User
+  userId: string
+  addToast: Props['addToast']
+  branding: WhiteLabel | null
+  brandingReady: boolean
+  onSaved: (b: WhiteLabel) => void
+}) {
   const [primaryColor, setPrimaryColor] = useState('#0EA5A0')
   const [inkColor, setInkColor] = useState('#1A1714')
   const [fontChoice, setFontChoice] = useState<'sans' | 'inter' | 'custom'>('sans')
@@ -418,33 +415,27 @@ function WhiteLabelTab({ user, userId, addToast }: { user: User; userId: string;
   const [imageBusy, setImageBusy] = useState(false)
   const faviconInputRef = useRef<HTMLInputElement>(null)
 
+  // AppShell already loaded (and applies) branding on mount — this just
+  // hydrates the form from it once, the first time it's ready. Deliberately
+  // NOT re-run on later `branding` changes: after Save, `onSaved` updates
+  // AppShell's copy (so the app re-skins live), and re-hydrating from that
+  // here would just be echoing back the values already on screen.
   useEffect(() => {
-    supabase
-      .from('white_label_settings')
-      .select('light_logo_url, dark_logo_url, favicon_url, primary_color, ink_color, font_choice, custom_font_name, custom_domain, domain_status, powered_by_badge')
-      .eq('user_id', userId)
-      .maybeSingle()
-      .then(({ data, error }) => {
-        if (error) {
-          addToast('Could not load your branding settings', 'error')
-        } else if (data) {
-          const row = data as WhiteLabelRow
-          setLightLogoUrl(row.light_logo_url)
-          setDarkLogoUrl(row.dark_logo_url)
-          setFaviconUrl(row.favicon_url)
-          setPrimaryColor(row.primary_color)
-          setInkColor(row.ink_color)
-          setFontChoice(row.font_choice)
-          setCustomFont(row.custom_font_name ?? 'Sora')
-          setDomain(row.custom_domain ?? '')
-          setDomainStatus(row.domain_status)
-          setPoweredBy(row.powered_by_badge)
-        }
-        setLoaded(true)
-      })
-    // Only ever runs for the signed-in user this tab was opened for.
+    if (!brandingReady) return
+    if (branding) {
+      setLightLogoUrl(branding.light_logo_url)
+      setDarkLogoUrl(branding.dark_logo_url)
+      setFaviconUrl(branding.favicon_url)
+      setPrimaryColor(branding.primary_color)
+      setInkColor(branding.ink_color)
+      setFontChoice(branding.font_choice)
+      setCustomFont(branding.custom_font_name ?? 'Sora')
+      setDomain(branding.custom_domain ?? '')
+      setDomainStatus(branding.domain_status)
+      setPoweredBy(branding.powered_by_badge)
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userId])
+  }, [brandingReady])
 
   // Uploads to the public "branding" bucket under a fixed per-slot path, so a
   // replace overwrites the same object instead of accumulating orphans.
@@ -480,8 +471,7 @@ function WhiteLabelTab({ user, userId, addToast }: { user: User; userId: string;
 
   const handleSave = async () => {
     setSaving(true)
-    const { error } = await supabase.from('white_label_settings').upsert({
-      user_id: userId,
+    const payload: WhiteLabel = {
       light_logo_url: lightLogoUrl,
       dark_logo_url: darkLogoUrl,
       favicon_url: faviconUrl,
@@ -492,16 +482,21 @@ function WhiteLabelTab({ user, userId, addToast }: { user: User; userId: string;
       custom_domain: domain || null,
       domain_status: domainStatus,
       powered_by_badge: poweredBy,
+    }
+    const { error } = await supabase.from('white_label_settings').upsert({
+      user_id: userId,
+      ...payload,
       updated_at: new Date().toISOString(),
     })
     setSaving(false)
-    if (error) addToast(error.message, 'error')
-    else addToast('Branding saved')
+    if (error) { addToast(error.message, 'error'); return }
+    onSaved(payload)
+    addToast('Branding saved — your workspace is updated')
   }
 
   const previewFont = fontChoice === 'sans' ? "'DM Sans', sans-serif" : fontChoice === 'inter' ? "'Inter', sans-serif" : `'${customFont || 'Sora'}', sans-serif`
 
-  if (!loaded) {
+  if (!brandingReady) {
     return <div className="card" style={{ padding: 40, textAlign: 'center', color: 'var(--ink-l)' }}>Loading…</div>
   }
 
@@ -783,7 +778,7 @@ function SecurityTab({ addToast, onLogout }: { addToast: Props['addToast']; onLo
 
 // ── Main view ────────────────────────────────────────────────
 
-export default function SettingsView({ active, user, userId, tweaks, setTweak, addToast, onLogout }: Props) {
+export default function SettingsView({ active, user, userId, tweaks, setTweak, addToast, onLogout, branding, brandingReady, onBrandingSaved }: Props) {
   const [tab, setTab] = useState<Tab>('profile')
 
   return (
@@ -816,7 +811,7 @@ export default function SettingsView({ active, user, userId, tweaks, setTweak, a
       <div style={{ maxWidth: tab === 'white-label' ? 1040 : 620 }}>
         {tab === 'profile' && <ProfileTab user={user} addToast={addToast} />}
         {tab === 'appearance' && <AppearanceTab tweaks={tweaks} setTweak={setTweak} />}
-        {tab === 'white-label' && <WhiteLabelTab user={user} userId={userId} addToast={addToast} />}
+        {tab === 'white-label' && <WhiteLabelTab user={user} userId={userId} addToast={addToast} branding={branding} brandingReady={brandingReady} onSaved={onBrandingSaved} />}
         {tab === 'notifications' && <NotificationsTab tweaks={tweaks} setTweak={setTweak} addToast={addToast} />}
         {tab === 'security' && <SecurityTab addToast={addToast} onLogout={onLogout} />}
       </div>
