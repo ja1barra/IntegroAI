@@ -264,7 +264,7 @@ export default function AppShell({ user, userId, onLogout }: { user: User; userI
           <ReportsView       active={view === 'reports'}          addToast={addToast} />
           <IntegrationsView  active={view === 'integrations'}     addToast={addToast} />
           <TeamView          active={view === 'team'}             addToast={addToast} user={user} />
-          <SettingsView      active={view === 'settings'}         user={user} tweaks={tweaks} setTweak={setTweak} addToast={addToast} onLogout={onLogout} />
+          <SettingsView      active={view === 'settings'}         user={user} userId={userId} tweaks={tweaks} setTweak={setTweak} addToast={addToast} onLogout={onLogout} />
           <AcademyView       active={view === 'academy'} />
         </main>
       </div>

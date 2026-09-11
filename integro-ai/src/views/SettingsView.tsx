@@ -11,6 +11,7 @@ const MAX_LOGO_BYTES = 2 * 1024 * 1024
 interface Props {
   active: boolean
   user: User
+  userId: string
   tweaks: Tweaks
   setTweak: (key: keyof Tweaks, value: Tweaks[keyof Tweaks]) => void
   addToast: (m: string, t?: 'success' | 'error') => void
@@ -334,16 +335,33 @@ function AppearanceTab({ tweaks, setTweak }: { tweaks: Tweaks; setTweak: Props['
 }
 
 // ── White Label ──────────────────────────────────────────────
-// Workspace-level branding — not a per-user preference like Appearance, so
-// it isn't wired into `tweaks`/Supabase yet. State here is local to the
-// tab; domain verification is simulated so the page stays demoable without
-// a DNS backend, matching how the rest of the app degrades gracefully.
+// Workspace-level branding, persisted to public.white_label_settings
+// (see supabase/white-label-schema.sql) — scoped per-user like
+// user_settings, since this app doesn't yet have a separate
+// workspace/organization table. Logo/favicon files upload to the public
+// "branding" Storage bucket under <user_id>/<slot>.<ext>; domain
+// verification itself stays simulated (no DNS backend), but the
+// verified/pending status is real and persists like everything else here.
 
-function LogoUploadRow({ label, hint, dark, imageUrl, onFile, onRemove }: {
+interface WhiteLabelRow {
+  light_logo_url: string | null
+  dark_logo_url: string | null
+  favicon_url: string | null
+  primary_color: string
+  ink_color: string
+  font_choice: 'sans' | 'inter' | 'custom'
+  custom_font_name: string | null
+  custom_domain: string | null
+  domain_status: 'unset' | 'pending' | 'verified'
+  powered_by_badge: boolean
+}
+
+function LogoUploadRow({ label, hint, dark, imageUrl, busy, onFile, onRemove }: {
   label: string
   hint: string
   dark?: boolean
   imageUrl: string | null
+  busy?: boolean
   onFile: (file: File) => void
   onRemove: () => void
 }) {
@@ -361,9 +379,11 @@ function LogoUploadRow({ label, hint, dark, imageUrl, onFile, onRemove }: {
         }}>
           {imageUrl ? <img src={imageUrl} alt="" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} /> : 'LOGO'}
         </div>
-        <button className="btn-sm btn-sm-ghost" onClick={() => inputRef.current?.click()}>{imageUrl ? 'Replace' : 'Upload'}</button>
+        <button className="btn-sm btn-sm-ghost" onClick={() => inputRef.current?.click()} disabled={busy}>
+          {busy ? 'Uploading…' : imageUrl ? 'Replace' : 'Upload'}
+        </button>
         {imageUrl && (
-          <button className="btn-sm btn-sm-ghost" style={{ color: '#c0392b' }} onClick={onRemove}>Remove</button>
+          <button className="btn-sm btn-sm-ghost" style={{ color: '#c0392b' }} onClick={onRemove} disabled={busy}>Remove</button>
         )}
         <input
           ref={inputRef}
@@ -381,7 +401,8 @@ function LogoUploadRow({ label, hint, dark, imageUrl, onFile, onRemove }: {
   )
 }
 
-function WhiteLabelTab({ user, addToast }: { user: User; addToast: Props['addToast'] }) {
+function WhiteLabelTab({ user, userId, addToast }: { user: User; userId: string; addToast: Props['addToast'] }) {
+  const [loaded, setLoaded] = useState(false)
   const [primaryColor, setPrimaryColor] = useState('#0EA5A0')
   const [inkColor, setInkColor] = useState('#1A1714')
   const [fontChoice, setFontChoice] = useState<'sans' | 'inter' | 'custom'>('sans')
@@ -394,22 +415,62 @@ function WhiteLabelTab({ user, addToast }: { user: User; addToast: Props['addToa
   const [lightLogoUrl, setLightLogoUrl] = useState<string | null>(null)
   const [darkLogoUrl, setDarkLogoUrl] = useState<string | null>(null)
   const [faviconUrl, setFaviconUrl] = useState<string | null>(null)
+  const [imageBusy, setImageBusy] = useState(false)
   const faviconInputRef = useRef<HTMLInputElement>(null)
 
-  // Previews only — object URLs live in the browser tab, so nothing is
-  // uploaded anywhere until this whole tab is wired to real persistence.
-  const handleImageFile = (label: string, file: File, current: string | null, setUrl: (u: string | null) => void) => {
+  useEffect(() => {
+    supabase
+      .from('white_label_settings')
+      .select('light_logo_url, dark_logo_url, favicon_url, primary_color, ink_color, font_choice, custom_font_name, custom_domain, domain_status, powered_by_badge')
+      .eq('user_id', userId)
+      .maybeSingle()
+      .then(({ data, error }) => {
+        if (error) {
+          addToast('Could not load your branding settings', 'error')
+        } else if (data) {
+          const row = data as WhiteLabelRow
+          setLightLogoUrl(row.light_logo_url)
+          setDarkLogoUrl(row.dark_logo_url)
+          setFaviconUrl(row.favicon_url)
+          setPrimaryColor(row.primary_color)
+          setInkColor(row.ink_color)
+          setFontChoice(row.font_choice)
+          setCustomFont(row.custom_font_name ?? 'Sora')
+          setDomain(row.custom_domain ?? '')
+          setDomainStatus(row.domain_status)
+          setPoweredBy(row.powered_by_badge)
+        }
+        setLoaded(true)
+      })
+    // Only ever runs for the signed-in user this tab was opened for.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId])
+
+  // Uploads to the public "branding" bucket under a fixed per-slot path, so a
+  // replace overwrites the same object instead of accumulating orphans.
+  const handleImageFile = async (slot: 'light-logo' | 'dark-logo' | 'favicon', label: string, file: File, setUrl: (u: string | null) => void) => {
     if (!file.type.startsWith('image/')) { addToast('Please choose an image file', 'error'); return }
     if (file.size > MAX_LOGO_BYTES) { addToast(`${label} must be under 2MB`, 'error'); return }
-    if (current) URL.revokeObjectURL(current)
-    setUrl(URL.createObjectURL(file))
+
+    setImageBusy(true)
+    const ext = file.name.split('.').pop()?.toLowerCase() || 'png'
+    const path = `${userId}/${slot}.${ext}`
+    const { error: uploadError } = await supabase.storage
+      .from('branding')
+      .upload(path, file, { upsert: true, cacheControl: '3600' })
+    if (uploadError) {
+      setImageBusy(false)
+      addToast(uploadError.message, 'error')
+      return
+    }
+
+    const { data: { publicUrl } } = supabase.storage.from('branding').getPublicUrl(path)
+    setUrl(`${publicUrl}?t=${Date.now()}`)
+    setImageBusy(false)
     addToast(`${label} updated`)
   }
 
-  const handleRemoveImage = (current: string | null, setUrl: (u: string | null) => void) => {
-    if (current) URL.revokeObjectURL(current)
-    setUrl(null)
-  }
+  const handleRemoveImage = (setUrl: (u: string | null) => void) => setUrl(null)
 
   const handleVerify = () => {
     if (!domain.trim()) return
@@ -417,12 +478,32 @@ function WhiteLabelTab({ user, addToast }: { user: User; addToast: Props['addToa
     setTimeout(() => { setDomainStatus('verified'); addToast('Domain verified (simulated for this preview)') }, 1400)
   }
 
-  const handleSave = () => {
+  const handleSave = async () => {
     setSaving(true)
-    setTimeout(() => { setSaving(false); addToast('Branding saved — this preview isn’t persisted to your workspace yet') }, 400)
+    const { error } = await supabase.from('white_label_settings').upsert({
+      user_id: userId,
+      light_logo_url: lightLogoUrl,
+      dark_logo_url: darkLogoUrl,
+      favicon_url: faviconUrl,
+      primary_color: primaryColor,
+      ink_color: inkColor,
+      font_choice: fontChoice,
+      custom_font_name: customFont || null,
+      custom_domain: domain || null,
+      domain_status: domainStatus,
+      powered_by_badge: poweredBy,
+      updated_at: new Date().toISOString(),
+    })
+    setSaving(false)
+    if (error) addToast(error.message, 'error')
+    else addToast('Branding saved')
   }
 
   const previewFont = fontChoice === 'sans' ? "'DM Sans', sans-serif" : fontChoice === 'inter' ? "'Inter', sans-serif" : `'${customFont || 'Sora'}', sans-serif`
+
+  if (!loaded) {
+    return <div className="card" style={{ padding: 40, textAlign: 'center', color: 'var(--ink-l)' }}>Loading…</div>
+  }
 
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: 20, alignItems: 'start' }}>
@@ -430,24 +511,26 @@ function WhiteLabelTab({ user, addToast }: { user: User; addToast: Props['addToa
         <SectionCard title="Brand identity" subtitle="Replace the Integro AI mark with your own across the sidebar, sign-in screen, and browser tab.">
           <LogoUploadRow
             label="Logo — light backgrounds" hint="SVG or PNG, transparent background. 240×60px recommended."
-            imageUrl={lightLogoUrl}
-            onFile={file => handleImageFile('Light logo', file, lightLogoUrl, setLightLogoUrl)}
-            onRemove={() => handleRemoveImage(lightLogoUrl, setLightLogoUrl)}
+            imageUrl={lightLogoUrl} busy={imageBusy}
+            onFile={file => handleImageFile('light-logo', 'Light logo', file, setLightLogoUrl)}
+            onRemove={() => handleRemoveImage(setLightLogoUrl)}
           />
           <LogoUploadRow
             label="Logo — dark backgrounds" hint="Used when your workspace is set to dark mode." dark
-            imageUrl={darkLogoUrl}
-            onFile={file => handleImageFile('Dark logo', file, darkLogoUrl, setDarkLogoUrl)}
-            onRemove={() => handleRemoveImage(darkLogoUrl, setDarkLogoUrl)}
+            imageUrl={darkLogoUrl} busy={imageBusy}
+            onFile={file => handleImageFile('dark-logo', 'Dark logo', file, setDarkLogoUrl)}
+            onRemove={() => handleRemoveImage(setDarkLogoUrl)}
           />
           <Row label="Favicon" hint="32×32px. Shown in the browser tab and bookmarks.">
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <div style={{ width: 32, height: 32, borderRadius: 8, overflow: 'hidden', background: faviconUrl ? 'rgba(255,255,255,0.55)' : primaryColor, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 {faviconUrl && <img src={faviconUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />}
               </div>
-              <button className="btn-sm btn-sm-ghost" onClick={() => faviconInputRef.current?.click()}>{faviconUrl ? 'Replace' : 'Upload'}</button>
+              <button className="btn-sm btn-sm-ghost" onClick={() => faviconInputRef.current?.click()} disabled={imageBusy}>
+                {imageBusy ? 'Uploading…' : faviconUrl ? 'Replace' : 'Upload'}
+              </button>
               {faviconUrl && (
-                <button className="btn-sm btn-sm-ghost" style={{ color: '#c0392b' }} onClick={() => handleRemoveImage(faviconUrl, setFaviconUrl)}>Remove</button>
+                <button className="btn-sm btn-sm-ghost" style={{ color: '#c0392b' }} onClick={() => handleRemoveImage(setFaviconUrl)} disabled={imageBusy}>Remove</button>
               )}
               <input
                 ref={faviconInputRef}
@@ -457,7 +540,7 @@ function WhiteLabelTab({ user, addToast }: { user: User; addToast: Props['addToa
                 onChange={e => {
                   const file = e.target.files?.[0]
                   e.target.value = ''
-                  if (file) handleImageFile('Favicon', file, faviconUrl, setFaviconUrl)
+                  if (file) handleImageFile('favicon', 'Favicon', file, setFaviconUrl)
                 }}
               />
             </div>
@@ -700,7 +783,7 @@ function SecurityTab({ addToast, onLogout }: { addToast: Props['addToast']; onLo
 
 // ── Main view ────────────────────────────────────────────────
 
-export default function SettingsView({ active, user, tweaks, setTweak, addToast, onLogout }: Props) {
+export default function SettingsView({ active, user, userId, tweaks, setTweak, addToast, onLogout }: Props) {
   const [tab, setTab] = useState<Tab>('profile')
 
   return (
@@ -733,7 +816,7 @@ export default function SettingsView({ active, user, tweaks, setTweak, addToast,
       <div style={{ maxWidth: tab === 'white-label' ? 1040 : 620 }}>
         {tab === 'profile' && <ProfileTab user={user} addToast={addToast} />}
         {tab === 'appearance' && <AppearanceTab tweaks={tweaks} setTweak={setTweak} />}
-        {tab === 'white-label' && <WhiteLabelTab user={user} addToast={addToast} />}
+        {tab === 'white-label' && <WhiteLabelTab user={user} userId={userId} addToast={addToast} />}
         {tab === 'notifications' && <NotificationsTab tweaks={tweaks} setTweak={setTweak} addToast={addToast} />}
         {tab === 'security' && <SecurityTab addToast={addToast} onLogout={onLogout} />}
       </div>
