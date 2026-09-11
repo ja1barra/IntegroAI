@@ -15,7 +15,7 @@ export default function AppHeader({ user, onToggleNotif, notifOpen, children, lo
   return (
     <header className="app-header">
       {logoUrl ? (
-        <img src={logoUrl} alt="" style={{ height: 22, maxWidth: 160, objectFit: 'contain' }} />
+        <img src={logoUrl} alt="" style={{ height: 32, maxWidth: 200, objectFit: 'contain' }} />
       ) : (
         <div className="app-logo">INTEGRO AI <span className="brand-tag">Beta</span></div>
       )}
