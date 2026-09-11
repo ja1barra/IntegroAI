@@ -6,6 +6,7 @@ import Avatar from '../components/ui/Avatar'
 import type { User, Tweaks, AccentColor, ThemeMode, DensityMode, FontFamily } from '../types'
 
 const MAX_AVATAR_BYTES = 5 * 1024 * 1024
+const MAX_LOGO_BYTES = 2 * 1024 * 1024
 
 interface Props {
   active: boolean
@@ -338,21 +339,43 @@ function AppearanceTab({ tweaks, setTweak }: { tweaks: Tweaks; setTweak: Props['
 // tab; domain verification is simulated so the page stays demoable without
 // a DNS backend, matching how the rest of the app degrades gracefully.
 
-function LogoUploadRow({ label, hint, dark, onUpload }: { label: string; hint: string; dark?: boolean; onUpload: () => void }) {
+function LogoUploadRow({ label, hint, dark, imageUrl, onFile, onRemove }: {
+  label: string
+  hint: string
+  dark?: boolean
+  imageUrl: string | null
+  onFile: (file: File) => void
+  onRemove: () => void
+}) {
+  const inputRef = useRef<HTMLInputElement>(null)
   return (
     <Row label={label} hint={hint}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         <div style={{
-          width: 96, height: 36, borderRadius: 'var(--radius-sm)', flexShrink: 0,
+          width: 96, height: 36, borderRadius: 'var(--radius-sm)', flexShrink: 0, overflow: 'hidden',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           fontFamily: "'Bebas Neue',sans-serif", fontSize: 13, letterSpacing: '0.03em',
           background: dark ? '#211c17' : 'rgba(255,255,255,0.55)',
           color: dark ? '#f0ece4' : 'var(--ink-m)',
           border: dark ? '1px solid rgba(255,255,255,0.14)' : '1px dashed rgba(26,23,20,0.18)',
         }}>
-          {dark ? 'LOGO' : 'LOGO'}
+          {imageUrl ? <img src={imageUrl} alt="" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} /> : 'LOGO'}
         </div>
-        <button className="btn-sm btn-sm-ghost" onClick={onUpload}>Upload</button>
+        <button className="btn-sm btn-sm-ghost" onClick={() => inputRef.current?.click()}>{imageUrl ? 'Replace' : 'Upload'}</button>
+        {imageUrl && (
+          <button className="btn-sm btn-sm-ghost" style={{ color: '#c0392b' }} onClick={onRemove}>Remove</button>
+        )}
+        <input
+          ref={inputRef}
+          type="file"
+          accept="image/*"
+          style={{ display: 'none' }}
+          onChange={e => {
+            const file = e.target.files?.[0]
+            e.target.value = ''
+            if (file) onFile(file)
+          }}
+        />
       </div>
     </Row>
   )
@@ -368,7 +391,25 @@ function WhiteLabelTab({ user, addToast }: { user: User; addToast: Props['addToa
   const [poweredBy, setPoweredBy] = useState(true)
   const [saving, setSaving] = useState(false)
 
-  const handleUpload = (label: string) => addToast(`${label} upload — coming soon`)
+  const [lightLogoUrl, setLightLogoUrl] = useState<string | null>(null)
+  const [darkLogoUrl, setDarkLogoUrl] = useState<string | null>(null)
+  const [faviconUrl, setFaviconUrl] = useState<string | null>(null)
+  const faviconInputRef = useRef<HTMLInputElement>(null)
+
+  // Previews only — object URLs live in the browser tab, so nothing is
+  // uploaded anywhere until this whole tab is wired to real persistence.
+  const handleImageFile = (label: string, file: File, current: string | null, setUrl: (u: string | null) => void) => {
+    if (!file.type.startsWith('image/')) { addToast('Please choose an image file', 'error'); return }
+    if (file.size > MAX_LOGO_BYTES) { addToast(`${label} must be under 2MB`, 'error'); return }
+    if (current) URL.revokeObjectURL(current)
+    setUrl(URL.createObjectURL(file))
+    addToast(`${label} updated`)
+  }
+
+  const handleRemoveImage = (current: string | null, setUrl: (u: string | null) => void) => {
+    if (current) URL.revokeObjectURL(current)
+    setUrl(null)
+  }
 
   const handleVerify = () => {
     if (!domain.trim()) return
@@ -387,12 +428,38 @@ function WhiteLabelTab({ user, addToast }: { user: User; addToast: Props['addToa
     <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: 20, alignItems: 'start' }}>
       <div>
         <SectionCard title="Brand identity" subtitle="Replace the Integro AI mark with your own across the sidebar, sign-in screen, and browser tab.">
-          <LogoUploadRow label="Logo — light backgrounds" hint="SVG or PNG, transparent background. 240×60px recommended." onUpload={() => handleUpload('Light logo')} />
-          <LogoUploadRow label="Logo — dark backgrounds" hint="Used when your workspace is set to dark mode." dark onUpload={() => handleUpload('Dark logo')} />
+          <LogoUploadRow
+            label="Logo — light backgrounds" hint="SVG or PNG, transparent background. 240×60px recommended."
+            imageUrl={lightLogoUrl}
+            onFile={file => handleImageFile('Light logo', file, lightLogoUrl, setLightLogoUrl)}
+            onRemove={() => handleRemoveImage(lightLogoUrl, setLightLogoUrl)}
+          />
+          <LogoUploadRow
+            label="Logo — dark backgrounds" hint="Used when your workspace is set to dark mode." dark
+            imageUrl={darkLogoUrl}
+            onFile={file => handleImageFile('Dark logo', file, darkLogoUrl, setDarkLogoUrl)}
+            onRemove={() => handleRemoveImage(darkLogoUrl, setDarkLogoUrl)}
+          />
           <Row label="Favicon" hint="32×32px. Shown in the browser tab and bookmarks.">
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <div style={{ width: 32, height: 32, borderRadius: 8, background: primaryColor, flexShrink: 0 }} />
-              <button className="btn-sm btn-sm-ghost" onClick={() => handleUpload('Favicon')}>Upload</button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <div style={{ width: 32, height: 32, borderRadius: 8, overflow: 'hidden', background: faviconUrl ? 'rgba(255,255,255,0.55)' : primaryColor, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                {faviconUrl && <img src={faviconUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />}
+              </div>
+              <button className="btn-sm btn-sm-ghost" onClick={() => faviconInputRef.current?.click()}>{faviconUrl ? 'Replace' : 'Upload'}</button>
+              {faviconUrl && (
+                <button className="btn-sm btn-sm-ghost" style={{ color: '#c0392b' }} onClick={() => handleRemoveImage(faviconUrl, setFaviconUrl)}>Remove</button>
+              )}
+              <input
+                ref={faviconInputRef}
+                type="file"
+                accept="image/*"
+                style={{ display: 'none' }}
+                onChange={e => {
+                  const file = e.target.files?.[0]
+                  e.target.value = ''
+                  if (file) handleImageFile('Favicon', file, faviconUrl, setFaviconUrl)
+                }}
+              />
             </div>
           </Row>
         </SectionCard>
@@ -493,7 +560,9 @@ function WhiteLabelTab({ user, addToast }: { user: User; addToast: Props['addToa
         </div>
         <div style={{ borderRadius: 'var(--radius)', border: '1px solid var(--glass-border)', boxShadow: 'var(--glass-shadow)', overflow: 'hidden', background: '#fdfaf4' }}>
           <div style={{ height: 38, background: 'rgba(245,240,232,0.9)', borderBottom: '1px solid rgba(255,255,255,0.6)', display: 'flex', alignItems: 'center', padding: '0 14px' }}>
-            <span style={{ fontFamily: previewFont, fontWeight: 600, fontSize: 13, color: inkColor }}>{user.org || 'Your Workspace'}</span>
+            {lightLogoUrl
+              ? <img src={lightLogoUrl} alt="" style={{ height: 22, maxWidth: 140, objectFit: 'contain' }} />
+              : <span style={{ fontFamily: previewFont, fontWeight: 600, fontSize: 13, color: inkColor }}>{user.org || 'Your Workspace'}</span>}
           </div>
           <div style={{ display: 'flex', height: 260 }}>
             <div style={{ width: 96, background: 'rgba(245,240,232,0.6)', borderRight: '1px solid rgba(255,255,255,0.5)', padding: '12px 8px', display: 'flex', flexDirection: 'column', gap: 5, flexShrink: 0 }}>
