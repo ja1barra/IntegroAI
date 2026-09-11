@@ -1,8 +1,11 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { Icon } from '../components/ui/Icon'
 import Toggle from '../components/ui/Toggle'
+import Avatar from '../components/ui/Avatar'
 import type { User, Tweaks, AccentColor, ThemeMode, DensityMode, FontFamily } from '../types'
+
+const MAX_AVATAR_BYTES = 5 * 1024 * 1024
 
 interface Props {
   active: boolean
@@ -77,6 +80,8 @@ function ProfileTab({ user, addToast }: { user: User; addToast: Props['addToast'
   const [newEmail, setNewEmail] = useState('')
   const [saving, setSaving] = useState(false)
   const [emailSaving, setEmailSaving] = useState(false)
+  const [photoBusy, setPhotoBusy] = useState(false)
+  const photoInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     setName(user.name); setOrg(user.org); setRole(user.role)
@@ -92,6 +97,45 @@ function ProfileTab({ user, addToast }: { user: User; addToast: Props['addToast'
   }, [])
 
   const dirty = name !== user.name || org !== user.org || role !== user.role
+
+  const handlePhotoSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+    if (!file.type.startsWith('image/')) { addToast('Please choose an image file', 'error'); return }
+    if (file.size > MAX_AVATAR_BYTES) { addToast('Image must be under 5MB', 'error'); return }
+
+    setPhotoBusy(true)
+    const { data: { user: authUser } } = await supabase.auth.getUser()
+    if (!authUser) { setPhotoBusy(false); return }
+
+    const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg'
+    const path = `${authUser.id}/avatar.${ext}`
+    const { error: uploadError } = await supabase.storage
+      .from('avatars')
+      .upload(path, file, { upsert: true, cacheControl: '3600' })
+    if (uploadError) {
+      setPhotoBusy(false)
+      addToast(uploadError.message, 'error')
+      return
+    }
+
+    const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(path)
+    // Cache-bust so a re-upload to the same path shows immediately instead of
+    // the browser's previously cached image at that URL.
+    const { error } = await supabase.auth.updateUser({ data: { avatar_url: `${publicUrl}?t=${Date.now()}` } })
+    setPhotoBusy(false)
+    if (error) addToast(error.message, 'error')
+    else addToast('Profile photo updated')
+  }
+
+  const handleRemovePhoto = async () => {
+    setPhotoBusy(true)
+    const { error } = await supabase.auth.updateUser({ data: { avatar_url: null } })
+    setPhotoBusy(false)
+    if (error) addToast(error.message, 'error')
+    else addToast('Profile photo removed')
+  }
 
   const handleSave = async () => {
     if (!name.trim()) return
@@ -116,12 +160,31 @@ function ProfileTab({ user, addToast }: { user: User; addToast: Props['addToast'
     <>
       <SectionCard title="Your profile">
         <div style={{ display: 'flex', alignItems: 'center', gap: 20, marginBottom: 24 }}>
-          <div style={{ width: 64, height: 64, borderRadius: '50%', background: 'var(--ink)', color: 'var(--cream)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, fontFamily: "'DM Mono',monospace", flexShrink: 0 }}>
-            {user.initials}
+          <div style={{ position: 'relative', flexShrink: 0 }}>
+            <Avatar
+              user={user}
+              style={{ width: 64, height: 64, borderRadius: '50%', background: 'var(--ink)', color: 'var(--cream)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, fontFamily: "'DM Mono',monospace" }}
+            />
+            {photoBusy && (
+              <div style={{ position: 'absolute', inset: 0, borderRadius: '50%', background: 'rgba(26,23,20,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <span className="btn-loading"><span /></span>
+              </div>
+            )}
           </div>
           <div>
             <div style={{ fontSize: 18, fontWeight: 700 }}>{user.name}</div>
             <div style={{ fontSize: 13, color: 'var(--ink-l)', marginTop: 2 }}>{user.role} · {user.org}</div>
+            <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+              <button className="btn-sm btn-sm-ghost" onClick={() => photoInputRef.current?.click()} disabled={photoBusy}>
+                {user.avatarUrl ? 'Change photo' : 'Upload photo'}
+              </button>
+              {user.avatarUrl && (
+                <button className="btn-sm btn-sm-ghost" style={{ color: '#c0392b' }} onClick={handleRemovePhoto} disabled={photoBusy}>
+                  Remove
+                </button>
+              )}
+              <input ref={photoInputRef} type="file" accept="image/*" onChange={handlePhotoSelect} style={{ display: 'none' }} />
+            </div>
           </div>
         </div>
 

@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import type { User } from '../../types'
+import Avatar from '../ui/Avatar'
 import { Icon } from '../ui/Icon'
 import type { IconName } from '../ui/Icon'
 
@@ -39,7 +40,7 @@ export default function UserMenu({ user, onNavigate, onLogout, onClose, directio
   return (
     <div className={`user-menu${direction === 'up' ? ' user-menu--up' : ''}`} ref={ref}>
       <div className="user-menu-header">
-        <div className="user-menu-avatar">{user.initials}</div>
+        <Avatar user={user} className="user-menu-avatar" />
         <div>
           <div className="user-menu-name">{user.name}</div>
           <div className="user-menu-role">{user.role} &middot; {user.org}</div>

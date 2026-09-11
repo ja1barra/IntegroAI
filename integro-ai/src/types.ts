@@ -10,6 +10,7 @@ export interface User {
   initials: string
   role: string
   org: string
+  avatarUrl?: string | null
 }
 
 export interface AgentStates {

@@ -50,6 +50,7 @@ export default function App() {
     initials: session.user.user_metadata?.initials ?? 'U',
     role: session.user.user_metadata?.role ?? 'Strategist',
     org: session.user.user_metadata?.org ?? 'My Company',
+    avatarUrl: session.user.user_metadata?.avatar_url ?? null,
   }
 
   return (

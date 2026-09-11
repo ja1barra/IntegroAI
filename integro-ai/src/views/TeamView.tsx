@@ -1,5 +1,6 @@
 import type { User } from '../types'
 import { Icon } from '../components/ui/Icon'
+import Avatar from '../components/ui/Avatar'
 
 interface Props { active: boolean; addToast: (m: string) => void; user: User }
 
@@ -20,7 +21,7 @@ export default function TeamView({ active, addToast, user }: Props) {
             <tr>
               <td>
                 <div style={{ display:'flex', alignItems:'center', gap:10 }}>
-                  <div style={{ width:30, height:30, borderRadius:'50%', background:'var(--ink)', color:'var(--cream)', display:'flex', alignItems:'center', justifyContent:'center', fontFamily:"'DM Mono',monospace", fontSize:10, flexShrink:0 }}>{user.initials}</div>
+                  <Avatar user={user} style={{ width:30, height:30, borderRadius:'50%', background:'var(--ink)', color:'var(--cream)', display:'flex', alignItems:'center', justifyContent:'center', fontFamily:"'DM Mono',monospace", fontSize:10, flexShrink:0 }} />
                   <span className="td-name">{user.name}</span>
                 </div>
               </td>

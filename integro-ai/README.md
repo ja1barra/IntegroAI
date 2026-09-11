@@ -93,7 +93,8 @@ can still generate CRM-grounded playbooks.
 
 1. **Database** — in the Supabase SQL Editor, run `supabase/schema.sql`, then
    `supabase/outbound-schema.sql`, then `supabase/playbooks-schema.sql`, then
-   `supabase/ai-provider-schema.sql` (all idempotent).
+   `supabase/ai-provider-schema.sql`, then `supabase/avatars-storage.sql`
+   (all idempotent).
 2. **Frontend env** — copy `.env.example` → `.env.local` and fill in your
    Supabase URL + anon key.
 3. **Server env (Vercel)** — set the variables in the repo-root `.env.example`

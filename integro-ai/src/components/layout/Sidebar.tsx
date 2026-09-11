@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import type { AgentId, AgentStates, User } from '../../types'
 import UserMenu from './UserMenu'
+import Avatar from '../ui/Avatar'
 import { Icon } from '../ui/Icon'
 import type { IconName } from '../ui/Icon'
 
@@ -78,7 +79,7 @@ export default function Sidebar({ view, setView, agentStates, user, onLogout }: 
           className={`sidebar-user ${menuOpen ? 'active' : ''}`}
           onClick={e => { e.stopPropagation(); setMenuOpen(p => !p) }}
         >
-          <div className="sidebar-avatar">{user.initials}</div>
+          <Avatar user={user} className="sidebar-avatar" />
           <div className="sidebar-user-info">
             <div className="sidebar-user-name">{user.name}</div>
             <div className="sidebar-user-role">{user.role}</div>
