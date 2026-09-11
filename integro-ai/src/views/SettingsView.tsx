@@ -284,26 +284,6 @@ function AppearanceTab({ tweaks, setTweak }: { tweaks: Tweaks; setTweak: Props['
         </div>
       </SectionCard>
 
-      <SectionCard title="Glass transparency" subtitle="Adjust how see-through the frosted-glass panels are.">
-        <input
-          type="range"
-          min={10}
-          max={95}
-          step={1}
-          value={tweaks.glassOpacity}
-          onChange={e => setTweak('glassOpacity', Number(e.target.value))}
-          style={{ width: '100%', accentColor: 'var(--orange)' }}
-        />
-        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, fontFamily: "'DM Mono',monospace", color: 'var(--ink-l)', marginTop: 4, marginBottom: 16 }}>
-          <span>More transparent</span>
-          <span>{tweaks.glassOpacity}%</span>
-          <span>More opaque</span>
-        </div>
-        <div className="card" style={{ padding: '16px 18px' }}>
-          <div style={{ fontSize: 12, color: 'var(--ink-m)' }}>This card uses your current glass settings — the sidebar, header, and other panels update the same way.</div>
-        </div>
-      </SectionCard>
-
       <SectionCard title="Font">
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {FONT_OPTIONS.map(f => (

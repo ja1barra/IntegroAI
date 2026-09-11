@@ -247,33 +247,18 @@ export default function AppShell({ user, userId, onLogout }: { user: User; userI
     else if (branding?.font_choice === 'custom' && branding.custom_font_name) fontStack = `'${branding.custom_font_name}', sans-serif`
     document.body.style.setProperty('--font-body', fontStack)
 
-    // Glass opacity — set on body (not documentElement) so the inline style
-    // wins over the `body.dark { --glass: ... }` rule in index.css, which
-    // otherwise shadows anything inherited from a lighter ancestor.
-    const alpha = Math.min(95, Math.max(10, tweaks.glassOpacity)) / 100
-    const [gr, gg, gb] = effectiveDark ? [20, 20, 20] : [255, 255, 255]
-    document.body.style.setProperty('--glass', `rgba(${gr},${gg},${gb},${alpha})`)
-    const hiAlpha = effectiveDark ? Math.min(0.5, alpha * 0.1) : Math.min(0.95, alpha * 1.17)
-    document.body.style.setProperty('--glass-hi', `rgba(255,255,255,${hiAlpha.toFixed(2)})`)
-
-    // Modals sit on top of a dark scrim (.modal-overlay) rather than the
-    // page background, so letting them go as transparent as the ambient
-    // glass preference allows makes their text unreadable — floor their
-    // opacity independently of the slider while still letting a *more*
-    // opaque preference carry through.
-    const modalAlpha = Math.max(alpha, 0.92)
-    document.body.style.setProperty('--modal-glass', `rgba(${gr},${gg},${gb},${modalAlpha})`)
+    // Surfaces are flat/opaque now (see index.css's --glass tokens) — there's
+    // no more translucency for a "glass opacity" preference to control, so
+    // this no longer touches --glass/--glass-hi/--modal-glass; the CSS
+    // defaults (and body.dark's) stand untouched.
 
     // These are applied imperatively to <body>/<html> rather than scoped to
     // this component's own DOM, so they must be cleaned up on sign-out —
-    // otherwise a dark-mode / custom-glass preference would leak onto the
-    // sign-in screen after AppShell unmounts.
+    // otherwise a dark-mode preference would leak onto the sign-in screen
+    // after AppShell unmounts.
     return () => {
       document.body.classList.remove('dark')
       document.body.style.removeProperty('--font-body')
-      document.body.style.removeProperty('--glass')
-      document.body.style.removeProperty('--glass-hi')
-      document.body.style.removeProperty('--modal-glass')
       document.documentElement.style.removeProperty('--orange')
       document.documentElement.style.removeProperty('--orange-h')
       document.documentElement.style.removeProperty('--ink')
