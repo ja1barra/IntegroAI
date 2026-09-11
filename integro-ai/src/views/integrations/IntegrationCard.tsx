@@ -20,7 +20,7 @@ const STATUS_CONFIG: Record<IntegrationStatus, { label: string; bg: string; colo
   connected:  { label: 'Connected',    bg: '#eaf5ee', color: '#2a7d4f', border: 'rgba(42,125,79,0.25)' },
   error:      { label: 'Auth Expired', bg: '#fdecea', color: '#c0392b', border: 'rgba(192,57,43,0.25)' },
   configure:  { label: 'Configure',    bg: '#fff4e0', color: '#8a5000', border: 'rgba(138,80,0,0.25)' },
-  available:  { label: 'Available',    bg: 'rgba(122,114,104,0.10)', color: 'var(--ink-l)', border: 'rgba(122,114,104,0.20)' },
+  available:  { label: 'Available',    bg: 'rgba(115,115,115,0.10)', color: 'var(--ink-l)', border: 'rgba(115,115,115,0.20)' },
 }
 
 export default function IntegrationCard({

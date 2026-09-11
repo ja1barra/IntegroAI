@@ -251,7 +251,7 @@ export default function AppShell({ user, userId, onLogout }: { user: User; userI
     // wins over the `body.dark { --glass: ... }` rule in index.css, which
     // otherwise shadows anything inherited from a lighter ancestor.
     const alpha = Math.min(95, Math.max(10, tweaks.glassOpacity)) / 100
-    const [gr, gg, gb] = effectiveDark ? [30, 26, 22] : [255, 251, 244]
+    const [gr, gg, gb] = effectiveDark ? [20, 20, 20] : [255, 255, 255]
     document.body.style.setProperty('--glass', `rgba(${gr},${gg},${gb},${alpha})`)
     const hiAlpha = effectiveDark ? Math.min(0.5, alpha * 0.1) : Math.min(0.95, alpha * 1.17)
     document.body.style.setProperty('--glass-hi', `rgba(255,255,255,${hiAlpha.toFixed(2)})`)

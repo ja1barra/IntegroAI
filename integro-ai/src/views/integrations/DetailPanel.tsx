@@ -273,7 +273,7 @@ export default function DetailPanel({ integration, onClose, onDisconnect, onConf
           <button className="btn-sm btn-sm-primary" style={{ fontSize: 11 }} onClick={handleSaveSettings}>
             Save Changes
           </button>
-          <button onClick={onClose} style={{ width: 28, height: 28, borderRadius: 8, border: 'none', background: 'rgba(122,114,104,0.12)', cursor: 'pointer', color: 'var(--ink-l)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <button onClick={onClose} style={{ width: 28, height: 28, borderRadius: 8, border: 'none', background: 'rgba(115,115,115,0.12)', cursor: 'pointer', color: 'var(--ink-l)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <Icon name="close" size={14} />
           </button>
         </div>

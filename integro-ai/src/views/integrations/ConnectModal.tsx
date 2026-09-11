@@ -175,7 +175,7 @@ export default function ConnectModal({ provider, name, logo, logoColor, mode, on
   return (
     <div style={{
       position: 'fixed', inset: 0, zIndex: 300,
-      background: 'rgba(26,23,20,0.55)', backdropFilter: 'blur(6px)',
+      background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(6px)',
       display: 'flex', alignItems: 'center', justifyContent: 'center',
       padding: 24,
     }} onClick={e => { if (e.target === e.currentTarget) onClose() }}>
@@ -183,7 +183,7 @@ export default function ConnectModal({ provider, name, logo, logoColor, mode, on
         width: '100%', maxWidth: 560, padding: 0, overflow: 'hidden',
         background: 'var(--modal-glass)',
         borderRadius: 16,
-        boxShadow: '0 24px 64px rgba(26,23,20,0.22)',
+        boxShadow: '0 24px 64px rgba(0,0,0,0.22)',
       }}>
         {/* Step progress bar */}
         <div style={{ padding: '20px 28px 0', borderBottom: '1px solid rgba(255,255,255,0.4)', paddingBottom: 16 }}>
@@ -197,8 +197,8 @@ export default function ConnectModal({ provider, name, logo, logoColor, mode, on
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
                     <div style={{
                       width: 28, height: 28, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      background: done ? 'var(--green, #2a7d4f)' : active ? 'var(--ink)' : 'rgba(122,114,104,0.15)',
-                      border: done ? '1px solid rgba(42,125,79,0.3)' : active ? '1px solid rgba(26,23,20,0.2)' : '1px solid rgba(122,114,104,0.2)',
+                      background: done ? 'var(--green, #2a7d4f)' : active ? 'var(--ink)' : 'rgba(115,115,115,0.15)',
+                      border: done ? '1px solid rgba(42,125,79,0.3)' : active ? '1px solid rgba(0,0,0,0.2)' : '1px solid rgba(115,115,115,0.2)',
                       transition: 'all 0.25s',
                     }}>
                       {done
@@ -209,7 +209,7 @@ export default function ConnectModal({ provider, name, logo, logoColor, mode, on
                     <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 9, letterSpacing: '0.07em', textTransform: 'uppercase', color: active ? 'var(--ink)' : 'var(--ink-l)', whiteSpace: 'nowrap' }}>{s}</span>
                   </div>
                   {i < steps.length - 1 && (
-                    <div style={{ flex: 1, height: 1, background: done ? 'rgba(42,125,79,0.35)' : 'rgba(122,114,104,0.2)', margin: '0 8px', marginBottom: 18 }} />
+                    <div style={{ flex: 1, height: 1, background: done ? 'rgba(42,125,79,0.35)' : 'rgba(115,115,115,0.2)', margin: '0 8px', marginBottom: 18 }} />
                   )}
                 </div>
               )

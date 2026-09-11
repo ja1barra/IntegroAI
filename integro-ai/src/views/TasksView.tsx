@@ -12,7 +12,7 @@ interface Props {
 }
 
 const STATUS_CFG: Record<TaskStatus, { label: string; color: string; bg: string }> = {
-  'todo':        { label: 'To Do',       color: '#7a7268', bg: 'rgba(122,114,104,0.12)' },
+  'todo':        { label: 'To Do',       color: '#737373', bg: 'rgba(115,115,115,0.12)' },
   'in-progress': { label: 'In Progress', color: '#4d9de0', bg: 'rgba(77,157,224,0.12)'  },
   'review':      { label: 'Review',      color: '#9b59b6', bg: 'rgba(155,89,182,0.12)'  },
   'done':        { label: 'Done',        color: '#27a368', bg: 'rgba(62,207,142,0.12)'  },

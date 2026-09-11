@@ -171,7 +171,7 @@ function ProfileTab({ user, addToast }: { user: User; addToast: Props['addToast'
               style={{ width: 64, height: 64, borderRadius: '50%', background: 'var(--ink)', color: 'var(--cream)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, fontFamily: "'DM Mono',monospace" }}
             />
             {photoBusy && (
-              <div style={{ position: 'absolute', inset: 0, borderRadius: '50%', background: 'rgba(26,23,20,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <div style={{ position: 'absolute', inset: 0, borderRadius: '50%', background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <span className="btn-loading"><span /></span>
               </div>
             )}
@@ -365,8 +365,8 @@ function LogoUploadRow({ label, hint, dark, imageUrl, busy, onFile, onRemove }: 
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           fontFamily: "'Bebas Neue',sans-serif", fontSize: 13, letterSpacing: '0.03em',
           background: dark ? '#211c17' : 'rgba(255,255,255,0.55)',
-          color: dark ? '#f0ece4' : 'var(--ink-m)',
-          border: dark ? '1px solid rgba(255,255,255,0.14)' : '1px dashed rgba(26,23,20,0.18)',
+          color: dark ? '#ffffff' : 'var(--ink-m)',
+          border: dark ? '1px solid rgba(255,255,255,0.14)' : '1px dashed rgba(0,0,0,0.18)',
         }}>
           {imageUrl ? <img src={imageUrl} alt="" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} /> : 'LOGO'}
         </div>
@@ -545,13 +545,13 @@ function WhiteLabelTab({ user, userId, addToast, branding, brandingReady, onSave
         <SectionCard title="Brand colors" subtitle="Sets the accent used for buttons, links, active nav states, and status highlights.">
           <Row label="Primary accent" hint="Falls back to Integro's default orange (#D4501A) until set.">
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <div style={{ width: 32, height: 32, borderRadius: 9, background: primaryColor, boxShadow: 'inset 0 0 0 1px rgba(26,23,20,0.12)', flexShrink: 0 }} />
+              <div style={{ width: 32, height: 32, borderRadius: 9, background: primaryColor, boxShadow: 'inset 0 0 0 1px rgba(0,0,0,0.12)', flexShrink: 0 }} />
               <input className="form-input" style={{ width: 110, padding: '8px 10px', fontFamily: "'DM Mono',monospace", fontSize: 12 }} value={primaryColor} onChange={e => setPrimaryColor(e.target.value)} />
             </div>
           </Row>
           <Row label="Ink / text tone" hint="Base text and dark-surface color across the workspace.">
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <div style={{ width: 32, height: 32, borderRadius: 9, background: inkColor, boxShadow: 'inset 0 0 0 1px rgba(26,23,20,0.12)', flexShrink: 0 }} />
+              <div style={{ width: 32, height: 32, borderRadius: 9, background: inkColor, boxShadow: 'inset 0 0 0 1px rgba(0,0,0,0.12)', flexShrink: 0 }} />
               <input className="form-input" style={{ width: 110, padding: '8px 10px', fontFamily: "'DM Mono',monospace", fontSize: 12 }} value={inkColor} onChange={e => setInkColor(e.target.value)} />
             </div>
           </Row>
@@ -613,7 +613,7 @@ function WhiteLabelTab({ user, userId, addToast, branding, brandingReady, onSave
             )}
           </div>
           {domainStatus !== 'unset' && domain && (
-            <div style={{ padding: '12px 14px', borderRadius: 'var(--radius-sm)', background: 'rgba(26,23,20,0.04)', border: '1px solid var(--rule)', fontFamily: "'DM Mono',monospace", fontSize: 11, color: 'var(--ink-m)', lineHeight: 1.7 }}>
+            <div style={{ padding: '12px 14px', borderRadius: 'var(--radius-sm)', background: 'rgba(0,0,0,0.04)', border: '1px solid var(--rule)', fontFamily: "'DM Mono',monospace", fontSize: 11, color: 'var(--ink-m)', lineHeight: 1.7 }}>
               Add a <strong style={{ color: 'var(--ink)' }}>CNAME</strong> record: <strong style={{ color: 'var(--ink)' }}>{domain}</strong> → <strong style={{ color: 'var(--ink)' }}>clients.integroai.com</strong><br />
               Verification above is simulated for this preview — DNS changes normally take up to 24 hours to propagate.
             </div>
@@ -637,13 +637,13 @@ function WhiteLabelTab({ user, userId, addToast, branding, brandingReady, onSave
           Live Preview
         </div>
         <div style={{ borderRadius: 'var(--radius)', border: '1px solid var(--glass-border)', boxShadow: 'var(--glass-shadow)', overflow: 'hidden', background: '#fdfaf4' }}>
-          <div style={{ height: 38, background: 'rgba(245,240,232,0.9)', borderBottom: '1px solid rgba(255,255,255,0.6)', display: 'flex', alignItems: 'center', padding: '0 14px' }}>
+          <div style={{ height: 38, background: 'rgba(255,255,255,0.9)', borderBottom: '1px solid rgba(255,255,255,0.6)', display: 'flex', alignItems: 'center', padding: '0 14px' }}>
             {lightLogoUrl
               ? <img src={lightLogoUrl} alt="" style={{ height: 22, maxWidth: 140, objectFit: 'contain' }} />
               : <span style={{ fontFamily: previewFont, fontWeight: 600, fontSize: 13, color: inkColor }}>{user.org || 'Your Workspace'}</span>}
           </div>
           <div style={{ display: 'flex', height: 260 }}>
-            <div style={{ width: 96, background: 'rgba(245,240,232,0.6)', borderRight: '1px solid rgba(255,255,255,0.5)', padding: '12px 8px', display: 'flex', flexDirection: 'column', gap: 5, flexShrink: 0 }}>
+            <div style={{ width: 96, background: 'rgba(255,255,255,0.6)', borderRight: '1px solid rgba(255,255,255,0.5)', padding: '12px 8px', display: 'flex', flexDirection: 'column', gap: 5, flexShrink: 0 }}>
               {['Outbound', 'Demand Gen', 'Success', 'Playbooks'].map((n, i) => (
                 <div key={n} style={{
                   fontSize: 9.5, padding: '6px 8px', borderRadius: 6,
@@ -663,7 +663,7 @@ function WhiteLabelTab({ user, userId, addToast, branding, brandingReady, onSave
             </div>
           </div>
           {poweredBy && (
-            <div style={{ height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(245,240,232,0.5)', borderTop: '1px solid rgba(255,255,255,0.5)', fontFamily: "'DM Mono',monospace", fontSize: 8.5, letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--ink-l)', opacity: 0.55 }}>
+            <div style={{ height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(255,255,255,0.5)', borderTop: '1px solid rgba(255,255,255,0.5)', fontFamily: "'DM Mono',monospace", fontSize: 8.5, letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--ink-l)', opacity: 0.55 }}>
               Powered by Integro AI
             </div>
           )}

@@ -16,7 +16,7 @@ interface Props {
 }
 
 const STATUS_CFG: Record<PlaybookStatus, { label: string; color: string; bg: string }> = {
-  draft:    { label: 'Draft',    color: '#7a7268', bg: 'rgba(122,114,104,0.12)' },
+  draft:    { label: 'Draft',    color: '#737373', bg: 'rgba(115,115,115,0.12)' },
   active:   { label: 'Active',   color: '#27a368', bg: 'rgba(62,207,142,0.12)' },
   archived: { label: 'Archived', color: '#9b59b6', bg: 'rgba(155,89,182,0.12)' },
 }
