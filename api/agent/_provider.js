@@ -13,6 +13,10 @@
  * haven't connected their own provider yet.
  */
 
+import { cfg } from '../_lib/env.js'
+import { createPostgrestStore } from '../_lib/store.js'
+import { getAuthedUser as sharedGetAuthedUser, legacyOutreachAllowed } from '../_lib/auth.js'
+
 const DEFAULT_ANTHROPIC_MODEL = 'claude-sonnet-5'
 const DEFAULT_OPENAI_BASE_URL = 'https://api.openai.com/v1'
 const GOOGLE_MODELS_BASE = 'https://generativelanguage.googleapis.com/v1beta/models'
@@ -21,25 +25,24 @@ export const SUPPORTED_PROVIDERS = ['anthropic', 'openai', 'google', 'custom']
 
 // ── auth ─────────────────────────────────────────────────────
 
-// Verifies the bearer token against Supabase Auth and hands back what's
-// needed to make RLS-scoped REST calls as that user (used to look up their
-// ai_provider_settings row without a service-role key).
+// Session verification now lives in the shared module (_lib/auth.js) so the
+// legacy agent endpoints and the Revenue API use one implementation. This
+// wrapper keeps the historic contract: { token, supabaseUrl, anonKey } | null
+// (userId is added for the per-tenant legacy gate below).
 export async function getAuthedUser(req) {
-  const auth = req.headers.authorization || ''
-  const token = auth.startsWith('Bearer ') ? auth.slice(7) : null
-  if (!token) return null
-  const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL
-  const anonKey = process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY
-  if (!supabaseUrl || !anonKey) return null
-  try {
-    const r = await fetch(`${supabaseUrl.replace(/\/$/, '')}/auth/v1/user`, {
-      headers: { Authorization: `Bearer ${token}`, apikey: anonKey },
-    })
-    if (!r.ok) return null
-    return { token, supabaseUrl: supabaseUrl.replace(/\/$/, ''), anonKey }
-  } catch {
-    return null
-  }
+  return sharedGetAuthedUser(req, cfg())
+}
+
+// Server-side kill switch: tenants migrated to Revenue Manager
+// (revenue_org_flags.legacy_outreach_enabled = false) cannot use the SDR /
+// outreach / send endpoints, regardless of what the client UI shows.
+export async function legacyOutreachEnabledFor(auth) {
+  return legacyOutreachAllowed(auth.userId, createPostgrestStore(cfg()))
+}
+
+export const LEGACY_DISABLED = {
+  status: 403,
+  body: { error: 'This workspace has moved to Integro Revenue Manager. Outbound sequences and AI Provider (BYOM) are disabled.', code: 'legacy_outreach_disabled' },
 }
 
 // ── provider resolution ──────────────────────────────────────

@@ -19,6 +19,7 @@ export function createFakeHubspot() {
     assoc: { contacts: new Map(), companies: new Map(), calls: new Map(), emails: new Map(), meetings: new Map(), tasks: new Map() }, // dealId -> [ids]
     forbid: new Set(),    // path substrings that return 403
     failNext: [],         // [{ match, error }] one-shot injected failures
+    tasks: new Map(),
     calls: [],
     clock: () => Date.now(),
   }
@@ -47,6 +48,12 @@ export function createFakeHubspot() {
       state.calls.push(['GET', path]); maybeFail(path)
       if (path === '/crm/v3/pipelines/deals') return { results: state.pipelines }
       if (path === '/crm/v3/owners') return { results: query.archived === 'true' ? state.archivedOwners : state.owners }
+      let mm
+      if ((mm = /^\/crm\/v3\/objects\/deals\/(\d+|[\w-]+)$/.exec(path)) && !path.endsWith('/deals/batch')) {
+        const d = state.deals.get(mm[1]); if (!d) throw new HubSpotForbidden(path, 'NOT_FOUND')
+        return { id: d.id, archived: d.archived, properties: d.properties }
+      }
+      if ((mm = /^\/crm\/v3\/objects\/tasks\/([\w-]+)$/.exec(path))) { const t = state.tasks.get(mm[1]); if (!t) throw new Error('task not found'); return t }
       if (path === '/crm/v3/objects/deals') { // archived listing
         const all = [...state.deals.values()].filter(d => d.archived)
         return { results: all.map(d => ({ id: d.id, archived: true, properties: {} })) }
@@ -81,11 +88,25 @@ export function createFakeHubspot() {
       if ((m = /^\/crm\/v3\/objects\/(calls|emails|meetings|tasks)\/batch\/read$/.exec(path))) {
         return { results: body.inputs.filter(i => state.acts[m[1]].has(i.id)).map(i => state.acts[m[1]].get(i.id)) }
       }
+      if (path === '/crm/v3/objects/tasks') {
+        const id = 'task-' + (state.tasks.size + 1)
+        state.tasks.set(id, { id, properties: body.properties, associations: body.associations })
+        return { id }
+      }
+      if (path === '/crm/v3/objects/tasks/search') {
+        const tok = body.filterGroups[0].filters[0].value
+        return { results: [...state.tasks.values()].filter(t => String(t.properties.hs_task_body ?? '').includes(tok)).map(t => ({ id: t.id })) }
+      }
       if (path === '/crm/v3/objects/deals/batch/read') {
         return { results: body.inputs.filter(i => state.deals.has(i.id)).map(i => { const d = state.deals.get(i.id); return { id: d.id, properties: pick(d, body.properties), propertiesWithHistory: { dealstage: [...d.history].reverse() } } }) }
       }
       throw new Error('fake: unhandled POST ' + path)
     },
+  }
+  client.request = async (method, path, { body } = {}) => {
+    state.calls.push([method, path]); maybeFail(path)
+    if (method === 'PATCH') { const id = path.split('/').pop(); Object.assign(state.deals.get(id).properties, body.properties); return {} }
+    return method === 'GET' ? client.get(path) : client.post(path, body)
   }
   return { state, client, addDeal, touch }
 }

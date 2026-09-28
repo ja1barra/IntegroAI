@@ -77,9 +77,14 @@ export async function sendEmail(
     return { ok: true, id: 'demo-' + Math.random().toString(36).slice(2), simulated: true }
   }
   try {
+    // The endpoint now requires the signed-in user's session (deny by default).
+    const { data: { session } } = await supabase.auth.getSession()
     const r = await fetch(ENDPOINT, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+      },
       body: JSON.stringify({
         provider: mailbox.provider,
         accessToken: mailbox.token,

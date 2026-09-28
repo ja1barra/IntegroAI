@@ -11,10 +11,12 @@
  * credential (same pattern as the other /api proxies). No secrets here.
  */
 
+import { getAuthedUser, legacyOutreachEnabledFor, LEGACY_DISABLED } from './_provider.js'
+
 const CORS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
 }
 
 function base64Url(str) {
@@ -69,6 +71,11 @@ export default async function handler(req, res) {
   Object.entries(CORS).forEach(([k, v]) => res.setHeader(k, v))
   if (req.method === 'OPTIONS') return res.status(200).end()
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
+
+  // Deny by default: previously this endpoint accepted any caller.
+  const auth = await getAuthedUser(req)
+  if (!auth) return res.status(401).json({ error: 'Sign in required' })
+  if (!(await legacyOutreachEnabledFor(auth))) return res.status(LEGACY_DISABLED.status).json(LEGACY_DISABLED.body)
 
   const { provider, accessToken, from, to, subject, body } = req.body ?? {}
 

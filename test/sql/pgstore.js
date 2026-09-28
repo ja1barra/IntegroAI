@@ -81,7 +81,8 @@ export function createPgStore(db) {
     },
     async rpc(fn, args = {}) {
       const keys = Object.keys(args)
-      const params = keys.map(k => jsonify(args[k]))
+      // PostgREST maps JSON arrays to text[] RPC args; only plain objects are jsonb here
+      const params = keys.map(k => (Array.isArray(args[k]) ? args[k] : jsonify(args[k])))
       const sql = `select * from public.${q(fn)}(${keys.map((k, i) => `${q(k)} => $${i + 1}`).join(', ')})`
       let res
       try { res = await db.query(sql, params) } catch (e) { const err = new Error(e.message); err.pg = true; throw err }

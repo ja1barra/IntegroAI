@@ -29,7 +29,7 @@ select p.proname, r.rolname from pg_proc p join pg_namespace n on n.oid = p.pron
    'rv_activate_hubspot_connection','rv_get_credentials','rv_acquire_refresh_lease','rv_store_refreshed_credentials',
    'rv_release_refresh_lease','rv_mark_connection','rv_disconnect_connection','rv_enqueue_job','rv_claim_job',
    'rv_heartbeat_job','rv_finish_job','rv_get_job','rv_reserve_ai_usage','rv_settle_ai_usage',
-   'rv_approve_proposal','rv_begin_execution','rv_finish_execution','rv_edit_proposal','rv_reject_proposal')
+   'rv_approve_proposal','rv_begin_execution','rv_finish_execution','rv_edit_proposal','rv_reject_proposal','rv_list_credentials_for_rotation','rv_rewrite_credentials')
    and has_function_privilege(r.rolname, p.oid, 'execute');
 
 -- 6. legacy data untouched: compare with the pre-migration baseline you captured

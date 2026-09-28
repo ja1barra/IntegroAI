@@ -18,7 +18,7 @@
  * mail-merge personalization.
  */
 
-import { getAuthedUser, resolveAIProvider, chatComplete } from './_provider.js'
+import { getAuthedUser, resolveAIProvider, chatComplete, legacyOutreachEnabledFor, LEGACY_DISABLED } from './_provider.js'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -85,6 +85,7 @@ export default async function handler(req, res) {
 
   const auth = await getAuthedUser(req)
   if (!auth) return res.status(401).json({ error: 'Sign in required' })
+  if (!(await legacyOutreachEnabledFor(auth))) return res.status(LEGACY_DISABLED.status).json(LEGACY_DISABLED.body)
 
   const resolved = await resolveAIProvider(auth)
   if (!resolved) {

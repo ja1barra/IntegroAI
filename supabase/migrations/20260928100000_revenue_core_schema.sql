@@ -1146,6 +1146,25 @@ begin
   return 'rejected';
 end $$;
 
+
+-- Key rotation support: list rows still on an older key and rewrite them with a CAS on key_version.
+create or replace function public.rv_list_credentials_for_rotation(_current_version text, _limit int)
+returns table (connection_id uuid, organization_id uuid, access_token_enc text, refresh_token_enc text, key_version text)
+language sql security definer set search_path = '' as $$
+  select c.connection_id, c.organization_id, c.access_token_enc, c.refresh_token_enc, c.key_version
+    from private.crm_credentials c where c.key_version <> _current_version order by c.updated_at limit _limit
+$$;
+
+create or replace function public.rv_rewrite_credentials(_conn uuid, _old_version text, _access_enc text, _refresh_enc text, _new_version text)
+returns boolean language plpgsql security definer set search_path = '' as $$
+declare _n int;
+begin
+  update private.crm_credentials set access_token_enc = _access_enc, refresh_token_enc = _refresh_enc, key_version = _new_version, updated_at = now()
+   where connection_id = _conn and key_version = _old_version and (refresh_lease_until is null or refresh_lease_until < now());
+  get diagnostics _n = row_count;
+  return _n = 1;
+end $$;
+
 -- Lock down: nothing above is callable from the browser.
 do $$
 declare f record;
@@ -1157,7 +1176,7 @@ begin
        'rv_activate_hubspot_connection','rv_get_credentials','rv_acquire_refresh_lease','rv_store_refreshed_credentials',
        'rv_release_refresh_lease','rv_mark_connection','rv_disconnect_connection','rv_enqueue_job','rv_claim_job',
        'rv_heartbeat_job','rv_finish_job','rv_get_job','rv_reserve_ai_usage','rv_settle_ai_usage',
-       'rv_approve_proposal','rv_begin_execution','rv_finish_execution','rv_edit_proposal','rv_reject_proposal')
+       'rv_approve_proposal','rv_begin_execution','rv_finish_execution','rv_edit_proposal','rv_reject_proposal','rv_list_credentials_for_rotation','rv_rewrite_credentials')
   loop
     execute format('revoke all on function %s from public, anon, authenticated', f.sig);
     execute format('grant execute on function %s to service_role', f.sig);

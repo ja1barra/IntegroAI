@@ -2,5 +2,13 @@
   "buildCommand": "cd integro-ai && npm install && npm run build",
   "outputDirectory": "integro-ai/dist",
   "framework": null,
-  "rewrites": [{ "source": "/(.*)", "destination": "/" }]
+  "functions": {
+    "api/revenue.js": { "maxDuration": 60 }
+  },
+  "rewrites": [
+    { "source": "/api/integrations/hubspot/:action(connect|callback|status|disconnect)", "destination": "/api/revenue?__path=integrations/hubspot/:action" },
+    { "source": "/api/integrations/hubspot", "destination": "/api/revenue?__path=integrations/hubspot" },
+    { "source": "/api/revenue/:path*", "destination": "/api/revenue?__path=revenue/:path*" },
+    { "source": "/(.*)", "destination": "/" }
+  ]
 }
