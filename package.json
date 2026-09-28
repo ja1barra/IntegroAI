@@ -1,0 +1,17 @@
+{
+  "name": "integroai-server",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Server-side code (Vercel functions in /api) for IntegroAI Revenue Manager. The web app lives in integro-ai/.",
+  "scripts": {
+    "test": "node --test \"test/**/*.test.js\"",
+    "test:sql": "node --test \"test/sql/*.test.js\""
+  },
+  "dependencies": {
+    "openai": "^5.0.0"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.3.0"
+  }
+}
