@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Integro AI — Revenue OS para SaaS</title>
+<meta name="description" content="Cuatro agentes de IA que trabajan tu pipeline completo, con una persona que aprueba cada envío.">
+<style>
+  :root { --bg:#faf8f5; --ink:#1a1714; --muted:#6b6560; --accent:#d4501a; --card:#fff; --line:#e8e3dc; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#14110f; --ink:#f3efe9; --muted:#a39c94; --card:#1e1a17; --line:#2e2925; }
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:'DM Sans',system-ui,sans-serif; background:var(--bg); color:var(--ink); line-height:1.6; }
+  .wrap { max-width:1040px; margin:0 auto; padding:0 16px; }
+  header.hero { padding:88px 0 56px; text-align:center; }
+  .eyebrow { color:var(--accent); font-weight:600; letter-spacing:.08em; text-transform:uppercase; font-size:.8rem; }
+  h1 { font-size:clamp(2rem,5vw,3.4rem); line-height:1.1; margin:12px 0 16px; }
+  .sub { color:var(--muted); font-size:1.15rem; max-width:680px; margin:0 auto 28px; }
+  .btn { display:inline-block; background:var(--accent); color:#fff; padding:14px 28px; border-radius:10px; text-decoration:none; font-weight:600; }
+  h2 { font-size:1.8rem; margin:56px 0 20px; }
+  .grid { display:grid; gap:16px; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:24px; }
+  .card .num { color:var(--accent); font-weight:700; font-size:.85rem; }
+  .card h3 { margin:6px 0 4px; }
+  .card .tag { color:var(--muted); margin:0 0 12px; }
+  .card ul { margin:0; padding-left:18px; color:var(--muted); font-size:.95rem; }
+  .card li { margin-bottom:6px; }
+  .why { display:grid; gap:16px; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); }
+  .why div { border-left:3px solid var(--accent); padding-left:14px; }
+  .why strong { display:block; }
+  .why span { color:var(--muted); font-size:.95rem; }
+  footer { text-align:center; padding:72px 0; }
+  footer .small { color:var(--muted); font-size:.85rem; margin-top:20px; }
+</style>
+</head>
+<body>
+<header class="hero">
+  <div class="wrap">
+    <div class="eyebrow">Revenue OS para SaaS</div>
+    <h1>Tu equipo de ingresos, con cuatro agentes que nunca se cansan.</h1>
+    <p class="sub">Integro AI conecta tu CRM, tu analítica y tu soporte. Cuatro agentes trabajan tu pipeline, desde la prospección hasta la expansión, y tu equipo aprueba cada envío.</p>
+    <a class="btn" href="#demo">Probar la demo</a>
+  </div>
+</header>
+
+<main class="wrap">
+  <h2>Cuatro agentes. Un solo sistema.</h2>
+  <div class="grid">
+    <article class="card">
+      <div class="num">AGENTE 01</div>
+      <h3>Outbound Sales Machine</h3>
+      <p class="tag">De contacto a conversación, sin trabajo manual.</p>
+      <ul>
+        <li>Sincroniza prospectos desde HubSpot o Apollo</li>
+        <li>Secuencias multi-paso redactadas por IA</li>
+        <li>Correo personalizado por prospecto</li>
+        <li>Revisas y apruebas antes de enviar por Gmail</li>
+        <li>Seguimientos automáticos, sin molestar a quien ya respondió</li>
+      </ul>
+    </article>
+    <article class="card">
+      <div class="num">AGENTE 02</div>
+      <h3>Demand Generation</h3>
+      <p class="tag">Sabe qué leads atender primero, y por qué.</p>
+      <ul>
+        <li>Cola de MQLs con score transparente de 0 a 100</li>
+        <li>Tráfico de GA4 por canal y landing page</li>
+        <li>"Route to Outbound" con un clic</li>
+      </ul>
+    </article>
+    <article class="card">
+      <div class="num">AGENTE 03</div>
+      <h3>Customer Success Engine</h3>
+      <p class="tag">Detecta el riesgo antes de que sea churn.</p>
+      <ul>
+        <li>Score de salud por cuenta con datos de Intercom</li>
+        <li>Pipeline de expansión desde HubSpot</li>
+        <li>Tareas de seguimiento con contexto ya cargado</li>
+      </ul>
+    </article>
+    <article class="card">
+      <div class="num">AGENTE 04</div>
+      <h3>SaaS Growth Playbooks</h3>
+      <p class="tag">Convierte tus datos en jugadas concretas.</p>
+      <ul>
+        <li>Playbooks desde el win/loss de tu CRM</li>
+        <li>O desde investigación web en vivo, con fuentes citadas</li>
+      </ul>
+    </article>
+  </div>
+
+  <h2>Por qué Integro AI</h2>
+  <div class="why">
+    <div><strong>Trae tu propia IA</strong><span>Claude, OpenAI, Gemini o cualquier endpoint compatible con OpenAI. Los costos de IA van a tu cuenta.</span></div>
+    <div><strong>Scores transparentes</strong><span>Ves por qué un lead o una cuenta tiene su puntuación. Sin cajas negras.</span></div>
+    <div><strong>Humano en el loop</strong><span>Nada se envía sin tu aprobación.</span></div>
+    <div><strong>Siempre demostrable</strong><span>Sin integraciones conectadas, funciona con datos demo realistas.</span></div>
+    <div><strong>Marca blanca</strong><span>Tu logo, tus colores, tu tipografía y tu dominio.</span></div>
+    <div><strong>Seguro por diseño</strong><span>Credenciales por usuario con RLS en Supabase.</span></div>
+  </div>
+</main>
+
+<footer id="demo">
+  <div class="wrap">
+    <h2 style="margin-top:0">IA que trabaja tu pipeline. Tú tienes la última palabra.</h2>
+    <a class="btn" href="#">Solicitar acceso</a>
+    <p class="small">Integro AI · Revenue OS</p>
+  </div>
+</footer>
+</body>
+</html>
