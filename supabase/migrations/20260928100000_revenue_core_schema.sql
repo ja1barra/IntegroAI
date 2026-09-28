@@ -898,7 +898,7 @@ begin
   return _id;
 end $$;
 
-create or replace function public.rv_claim_job(_worker text, _lease_seconds int, _kinds text[])
+create or replace function public.rv_claim_job(_worker text, _lease_seconds int, _kinds text[], _org uuid default null)
 returns table (id uuid, organization_id uuid, kind text, payload jsonb, attempts int, max_attempts int, reclaimed boolean)
 language plpgsql security definer set search_path = '' as $$
 declare _job private.revenue_jobs%rowtype;
@@ -910,6 +910,7 @@ begin
   select * into _job from private.revenue_jobs j
    where ((j.status = 'queued' and j.run_after <= now()) or (j.status = 'running' and j.lease_until < now()))
      and (_kinds is null or j.kind = any (_kinds))
+     and (_org is null or j.organization_id = _org)
    order by j.run_after, j.created_at
    for update skip locked limit 1;
   if not found then return; end if;
@@ -940,6 +941,12 @@ begin
   if not found then return 'lost_lease'; end if;
   if _outcome = 'succeeded' then
     _next := 'succeeded';
+  elsif _outcome = 'continue' then
+    -- cooperative yield (time budget): back to the queue WITHOUT consuming an attempt
+    update private.revenue_jobs set status = 'queued', locked_by = null, lease_until = null,
+           attempts = greatest(_job.attempts - 1, 0), run_after = coalesce(_retry_at, now()), updated_at = now()
+     where id = _id;
+    return 'queued';
   elsif _outcome = 'retry' and _job.attempts < _job.max_attempts then
     _next := 'queued';
   elsif _outcome = 'retry' then
@@ -1071,7 +1078,7 @@ begin
 end $$;
 
 create or replace function public.rv_finish_execution(
-  _org uuid, _exec uuid, _status text, _external_id text, _uncertain boolean, _error text)
+  _org uuid, _exec uuid, _status text, _external_id text, _uncertain boolean, _error text, _proposal_status text default null)
 returns void language plpgsql security definer set search_path = '' as $$
 declare _e public.revenue_action_executions%rowtype; _pstatus text;
 begin
@@ -1080,12 +1087,63 @@ begin
   if not found then raise exception 'not_found'; end if;
   update public.revenue_action_executions set status = _status, external_result_id = _external_id,
          uncertain = coalesce(_uncertain, false), error = left(_error, 500), finished_at = now() where id = _exec;
-  _pstatus := _status;
+  _pstatus := coalesce(_proposal_status, _status);
+  if _pstatus not in ('succeeded','failed','needs_review','conflict','expired') then raise exception 'bad proposal status'; end if;
   update public.revenue_action_proposals set status = _pstatus,
          result = jsonb_build_object('external_result_id', _external_id, 'error', left(_error, 500))
    where id = _e.proposal_id and organization_id = _org;
   perform public.rv_audit(_org, 'system', null, 'action.' || _status, 'action_proposal', _e.proposal_id::text, null,
             jsonb_build_object('execution_id', _exec, 'external_result_id', _external_id, 'uncertain', coalesce(_uncertain, false)), null);
+end $$;
+
+
+-- Edit: bumps version + hash, voids any pending approval. Only proposed/approved-not-started.
+create or replace function public.rv_edit_proposal(
+  _org uuid, _proposal uuid, _base_version int, _payload jsonb, _hash text, _editor uuid, _request_id text)
+returns table (result text, new_version int)
+language plpgsql security definer set search_path = '' as $$
+declare _p public.revenue_action_proposals%rowtype;
+begin
+  if not exists (select 1 from public.organization_members m where m.organization_id = _org and m.user_id = _editor
+                 and m.status = 'active' and m.role in ('admin','manager','member')) then
+    return query select 'forbidden'::text, null::int; return;
+  end if;
+  select * into _p from public.revenue_action_proposals where id = _proposal and organization_id = _org for update;
+  if not found then return query select 'not_found'::text, null::int; return; end if;
+  if _p.version <> _base_version then return query select 'stale_version'::text, null::int; return; end if;
+  if _p.status not in ('proposed','approved') then return query select ('not_editable_' || _p.status)::text, null::int; return; end if;
+  if _p.status = 'approved' then
+    update public.revenue_action_executions set status = 'failed', error = 'approval superseded by an edit', finished_at = now()
+     where organization_id = _org and proposal_id = _proposal and status = 'queued';
+    update private.revenue_jobs set status = 'dead', last_error = 'approval superseded by an edit', finished_at = now(), locked_by = null, lease_until = null
+     where organization_id = _org and kind = 'execute_action' and status = 'queued' and payload->>'proposal_id' = _proposal::text;
+  end if;
+  update public.revenue_action_proposals set payload = _payload, payload_hash = _hash, version = _p.version + 1, status = 'proposed',
+         approved_by = null, approved_at = null, approved_version = null, approved_hash = null
+   where id = _proposal;
+  perform public.rv_audit(_org, 'user', _editor, 'action.edited', 'action_proposal', _proposal::text,
+            jsonb_build_object('version', _p.version, 'payload', _p.payload), jsonb_build_object('version', _p.version + 1, 'payload', _payload), _request_id);
+  return query select 'edited'::text, _p.version + 1;
+end $$;
+
+create or replace function public.rv_reject_proposal(_org uuid, _proposal uuid, _actor uuid, _reason text, _request_id text)
+returns text language plpgsql security definer set search_path = '' as $$
+declare _p public.revenue_action_proposals%rowtype;
+begin
+  if not exists (select 1 from public.organization_members m where m.organization_id = _org and m.user_id = _actor
+                 and m.status = 'active' and m.role in ('admin','manager')) then return 'forbidden'; end if;
+  select * into _p from public.revenue_action_proposals where id = _proposal and organization_id = _org for update;
+  if not found then return 'not_found'; end if;
+  if _p.status not in ('proposed','approved') then return 'not_rejectable_' || _p.status; end if;
+  if _p.status = 'approved' then
+    update public.revenue_action_executions set status = 'failed', error = 'rejected after approval', finished_at = now()
+     where organization_id = _org and proposal_id = _proposal and status = 'queued';
+    update private.revenue_jobs set status = 'dead', last_error = 'rejected after approval', finished_at = now(), locked_by = null, lease_until = null
+     where organization_id = _org and kind = 'execute_action' and status = 'queued' and payload->>'proposal_id' = _proposal::text;
+  end if;
+  update public.revenue_action_proposals set status = 'rejected', rejected_by = _actor, result = jsonb_build_object('reason', left(_reason, 500)) where id = _proposal;
+  perform public.rv_audit(_org, 'user', _actor, 'action.rejected', 'action_proposal', _proposal::text, null, jsonb_build_object('reason', left(_reason, 500)), _request_id);
+  return 'rejected';
 end $$;
 
 -- Lock down: nothing above is callable from the browser.
@@ -1099,7 +1157,7 @@ begin
        'rv_activate_hubspot_connection','rv_get_credentials','rv_acquire_refresh_lease','rv_store_refreshed_credentials',
        'rv_release_refresh_lease','rv_mark_connection','rv_disconnect_connection','rv_enqueue_job','rv_claim_job',
        'rv_heartbeat_job','rv_finish_job','rv_get_job','rv_reserve_ai_usage','rv_settle_ai_usage',
-       'rv_approve_proposal','rv_begin_execution','rv_finish_execution')
+       'rv_approve_proposal','rv_begin_execution','rv_finish_execution','rv_edit_proposal','rv_reject_proposal')
   loop
     execute format('revoke all on function %s from public, anon, authenticated', f.sig);
     execute format('grant execute on function %s to service_role', f.sig);
