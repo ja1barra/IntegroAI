@@ -181,6 +181,8 @@ test('worker restart mid-execution (execution already running) => needs_review, 
   const client = fakeClient()
   assert.equal((await run(execId, client)).outcome, 'needs_review')
   assert.equal(client.log.posts.length, 0)
+  // the crash recovery also schedules a reconcile job that will look for the marker in HubSpot
+  assert.equal((await db.query(`select count(*)::int c from private.revenue_jobs where kind='reconcile' and dedupe_key = $1`, ['reconcile:' + execId])).rows[0].c, 1)
 })
 
 test('HubSpot 403 on write => failed with an actionable message', async () => {

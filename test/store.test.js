@@ -46,3 +46,13 @@ test('selectAll pages past PostgREST max-rows instead of truncating silently', a
   const store = { async select(_t, { limit, offset }) { return rows.slice(offset, offset + limit) } }
   assert.equal((await selectAll(store, 't', { order: 'i.asc' })).length, 2300)
 })
+
+test('service-role store refuses unscoped writes: undefined filters and empty where are programming errors', async () => {
+  const r = recorder(() => json(200, []))
+  const s = createPostgrestStore(cfg, r.f)
+  await assert.rejects(s.select('t', { where: { organization_id: undefined } }), /undefined/)
+  await assert.rejects(s.update('t', { organization_id: undefined, id: 'x' }, { a: 1 }), /undefined/)
+  await assert.rejects(s.update('t', {}, { a: 1 }), /where/)
+  await assert.rejects(s.delete('t', {}), /where/)
+  assert.equal(r.calls.length, 0)                                                                                    // nothing was sent
+})

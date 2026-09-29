@@ -14,7 +14,7 @@ function colList(columns) {
 function whereSql(where = {}, params) {
   const parts = []
   for (const [k, v] of Object.entries(where)) {
-    if (v === undefined) continue
+    if (v === undefined) throw new Error(`store: filter "${k}" is undefined`)
     if (v !== null && typeof v === 'object' && !Array.isArray(v)) {
       if ('in' in v) { params.push(v.in); parts.push(`${q(k)} = any($${params.length})`) }
       else if ('gte' in v) { params.push(v.gte); parts.push(`${q(k)} >= $${params.length}`) }

@@ -19,7 +19,8 @@ const TIMEOUT_MS = 15000
 function qs(where = {}) {
   const p = []
   for (const [k, v] of Object.entries(where)) {
-    if (v === undefined) continue
+    // The service role bypasses RLS: a filter that silently vanishes would turn into an unscoped read/PATCH/DELETE.
+    if (v === undefined) throw new Error(`store: filter "${k}" is undefined`)
     if (v !== null && typeof v === 'object' && !Array.isArray(v)) {
       // PostgREST list syntax: quote each item (escape \\ and \") so commas/parentheses inside values are safe.
       if ('in' in v) p.push([k, `in.(${v.in.map(x => `"${String(x).replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`).join(',')})`])
@@ -88,6 +89,7 @@ export function createPostgrestStore(config, fetchImpl = fetch) {
       return (await call('POST', `/${table}${params.size ? `?${params}` : ''}`, { body: arr, extra: { Prefer: prefer.join(',') } })) ?? []
     },
     async update(table, where, patch) {
+      if (!where || !Object.keys(where).length) throw new Error('update requires a where clause')
       const params = new URLSearchParams(qs(where))
       return (await call('PATCH', `/${table}?${params}`, { body: patch, extra: { Prefer: 'return=representation' } })) ?? []
     },

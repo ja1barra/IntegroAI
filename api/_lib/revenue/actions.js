@@ -134,7 +134,12 @@ async function markUncertain(store, orgId, executionId, error, { externalId = nu
 export async function executeAction({ store, orgId, executionId, getClient, now = () => Date.now(), log = () => {} }) {
   const begin = await store.rpc('rv_begin_execution', { _org: orgId, _exec: executionId })
   const b = Array.isArray(begin) ? begin[0] : begin
-  if (b.result !== 'started') { log('warn', 'action.not_started', { execution_id: executionId, result: b.result }); return { outcome: b.result } }
+  if (b.result !== 'started') {
+    log('warn', 'action.not_started', { execution_id: executionId, result: b.result })
+    // a previous worker died mid-flight: the remote outcome is unknown, so make sure a reconcile job looks for the marker
+    if (b.result === 'needs_review') await store.rpc('rv_enqueue_job', { _org: orgId, _kind: 'reconcile', _payload: { execution_id: executionId }, _dedupe: `reconcile:${executionId}`, _run_after: new Date(now() + 60_000).toISOString(), _max_attempts: 6, _created_by: null }).catch(() => {})
+    return { outcome: b.result }
+  }
 
   // From here the execution is 'running'. ANY unexpected exception must settle it, otherwise the proposal would
   // sit in 'executing' forever. Before the write nothing changed remotely => failed; after it => outcome uncertain.

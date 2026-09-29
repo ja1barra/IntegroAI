@@ -11,6 +11,7 @@ before(async () => {
   // pre-existing (legacy) data BEFORE the migrations run
   ua = await seedUser(db, 'alice@a.com', 'Alpha Inc')
   ub = await seedUser(db, 'bob@b.com', 'Beta Inc')
+  await seedUser(db, 'longname@legacy.com', 'Y'.repeat(300))       // would have aborted the backfill (organizations.name <= 200)
   await db.query(`insert into public.integrations (user_id, provider, connected) values ($1,'hubspot',true)`, [ua])
   await db.query(`insert into public.ai_provider_settings (user_id, provider, api_key) values ($1,'openai','sk-test')`, [ub])
   legacy.before = (await db.query(`select (select count(*) from public.user_profiles)::int p, (select count(*) from public.integrations)::int i, (select count(*) from public.ai_provider_settings)::int a`)).rows[0]
@@ -314,4 +315,11 @@ test('AI reservations that were never settled (killed function) expire instead o
   await asService(db, async () => {
     assert.ok((await db.query(`select * from public.rv_reserve_ai_usage($1,$2,'ask',9000,'r3',null)`, [orgB, ub])).rows[0].usage_id)
   })
+})
+
+test('very long legacy org names cannot abort the backfill or org creation (name is capped at 200 chars)', async () => {
+  const long = 'X'.repeat(500)
+  const u = await seedUser(db, 'long@x.com', long)
+  const id = (await db.query(`select public.rv_ensure_user_org($1, $2) v`, [u, long])).rows[0].v
+  assert.equal((await db.query(`select length(name) l from public.organizations where id = $1`, [id])).rows[0].l, 200)
 })

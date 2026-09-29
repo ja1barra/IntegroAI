@@ -86,13 +86,21 @@ export function useSync(onDone?: () => void) {
       const s = await api<{ job_id?: string; sync_run_id: string; deduped?: boolean }>('revenue/sync', { method: 'POST', body: { full } })
       for (let i = 0; i < 240 && !stop.current; i++) {
         await api('revenue/worker/kick', { method: 'POST', body: {} }).catch(() => undefined)
-        if (!s.job_id) { await new Promise(r => setTimeout(r, 2000)) }
-        const runId = s.sync_run_id
-        const j = s.job_id ? await api<JobResponse>(`revenue/jobs/${s.job_id}`, { query: { run: runId } }) : null
-        if (j?.sync_run) { setStep(j.sync_run.step); setCounters(j.sync_run.counters); setWarnings(j.sync_run.warnings ?? []) }
-        if (j && (j.job.status === 'succeeded' || j.job.status === 'failed' || j.job.status === 'dead')) {
-          if (j.sync_run?.status === 'failed') throw new ApiError(500, 'sync_failed', j.sync_run.error ?? 'Sync failed')
-          break
+        if (s.job_id) {
+          const j = await api<JobResponse>(`revenue/jobs/${s.job_id}`, { query: { run: s.sync_run_id } })
+          if (j.sync_run) { setStep(j.sync_run.step); setCounters(j.sync_run.counters); setWarnings(j.sync_run.warnings ?? []) }
+          if (j.job.status === 'succeeded' || j.job.status === 'failed' || j.job.status === 'dead') {
+            if (j.sync_run?.status === 'failed') throw new ApiError(500, 'sync_failed', j.sync_run.error ?? 'Sync failed')
+            break
+          }
+        } else {
+          // an already-running sync was joined without a job id: follow it through the connection status instead
+          const st = await api<{ last_sync: { status: string; step: string | null; error: string | null; counters: Record<string, number>; warnings: string[] } | null }>('integrations/hubspot/status')
+          if (st.last_sync) { setStep(st.last_sync.step); setCounters(st.last_sync.counters); setWarnings(st.last_sync.warnings ?? []) }
+          if (st.last_sync && !['queued', 'running'].includes(st.last_sync.status)) {
+            if (st.last_sync.status === 'failed') throw new ApiError(500, 'sync_failed', st.last_sync.error ?? 'Sync failed')
+            break
+          }
         }
         await new Promise(r => setTimeout(r, 1500))
       }

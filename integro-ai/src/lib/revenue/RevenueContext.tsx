@@ -9,7 +9,8 @@ const C = createContext<State>({ loading: true, ctx: null, error: null, reload: 
 export function RevenueProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<Omit<State, 'reload'>>({ loading: true, ctx: null, error: null })
   const load = useCallback(() => {
-    setState(s => ({ ...s, loading: true }))
+    // silent refresh once we have a context: flipping `loading` would unmount every view (and lose unsaved form state)
+    setState(s => (s.ctx ? s : { ...s, loading: true }))
     api<Ctx>('revenue/context')
       .then(ctx => setState({ loading: false, ctx, error: null }))
       .catch(e => setState({ loading: false, ctx: null, error: e instanceof ApiError ? e : new ApiError(0, 'error', 'Unexpected error') }))

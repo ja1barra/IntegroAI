@@ -720,7 +720,7 @@ begin
    where m.user_id = _user and m.status = 'active' order by m.created_at limit 1;
   if _org is not null then return _org; end if;
   insert into public.organizations (name, created_by)
-    values (coalesce(nullif(btrim(_name), ''), 'My Company'), _user) returning id into _org;
+    values (left(coalesce(nullif(btrim(_name), ''), 'My Company'), 200), _user) returning id into _org;
   insert into public.organization_members (organization_id, user_id, role) values (_org, _user, 'admin');
   insert into public.revenue_org_flags (organization_id) values (_org) on conflict do nothing;
   insert into public.revenue_settings (organization_id) values (_org) on conflict do nothing;

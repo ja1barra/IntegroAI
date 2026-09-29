@@ -21,7 +21,7 @@ begin
     _n := 0;
     for _u in
       select u.id as user_id,
-             coalesce(nullif(btrim(p.org), ''), 'My Company') as org_name
+             left(coalesce(nullif(btrim(p.org), ''), 'My Company'), 200) as org_name   -- organizations.name is limited to 200 chars
         from auth.users u
         left join public.user_profiles p on p.id = u.id
        where not exists (select 1 from public.revenue_legacy_user_org_map m where m.user_id = u.id)
