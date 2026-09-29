@@ -42,11 +42,11 @@ export async function evaluateOrg({ store, orgId, asOf = new Date().toISOString(
   const stageById = new Map(stages.map(s => [s.id, s]))
   const ownerById = new Map(owners.map(o => [o.id, o]))
 
-  const allDeals = await pageAll(store, 'crm_deals', { where: { ...scope, archived: false }, columns: 'id,external_id,name,pipeline_id,stage_id,owner_id,owner_state,field_states,amount::text,currency,close_at,stage_entered_at,created_at_source', order: 'external_id.asc' })
+  const allDeals = await pageAll(store, 'crm_deals', { where: { ...scope, archived: false }, columns: 'id,external_id,name,pipeline_id,stage_id,owner_id,owner_state,field_states,amount::text,currency,close_at,stage_entered_at,created_at_source', order: 'id.asc' })
   const deals = allDeals.filter(d => !selected.size || (d.pipeline_id && selected.has(pipeById.get(d.pipeline_id)?.external_id)))
 
   // associations & activities (in-memory joins; sized for MVP-scale portals, see docs/revenue/operations.md)
-  const assoc = await pageAll(store, 'crm_associations', { where: { ...scope, deleted_at: { isnull: true } }, columns: 'from_type,from_external_id,to_type,to_external_id', order: 'from_external_id.asc' })
+  const assoc = await pageAll(store, 'crm_associations', { where: { ...scope, deleted_at: { isnull: true } }, columns: 'from_type,from_external_id,to_type,to_external_id', order: 'id.asc' })
   const contactsByDeal = new Map(), actIdsByDeal = new Map()
   for (const a of assoc) {
     if (a.from_type === 'deal' && a.to_type === 'contact') contactsByDeal.set(a.from_external_id, (contactsByDeal.get(a.from_external_id) ?? new Set()).add(a.to_external_id))
@@ -56,11 +56,11 @@ export async function evaluateOrg({ store, orgId, asOf = new Date().toISOString(
       actIdsByDeal.get(k).push(`${a.from_type}:${a.from_external_id}`)
     }
   }
-  const acts = await pageAll(store, 'crm_activities', { where: { ...scope, archived: false }, columns: 'id,external_id,type,occurred_at,due_at,status,is_system', order: 'external_id.asc' })
+  const acts = await pageAll(store, 'crm_activities', { where: { ...scope, archived: false }, columns: 'id,external_id,type,occurred_at,due_at,status,is_system', order: 'id.asc' })
   const actByKey = new Map(acts.map(a => [`${a.type}:${a.external_id}`, a]))
 
   // stage-duration statistics from real stage history only
-  const hist = await pageAll(store, 'crm_property_history', { where: { organization_id: orgId, connection_id: conn.id, property: 'dealstage' }, columns: 'deal_id,value,effective_at', order: 'effective_at.asc' })
+  const hist = await pageAll(store, 'crm_property_history', { where: { organization_id: orgId, connection_id: conn.id, property: 'dealstage' }, columns: 'deal_id,value,effective_at', order: 'effective_at.asc,id.asc' })
   const dealPipe = new Map(allDeals.map(d => [d.id, d.pipeline_id]))
   const stats = computeStageStats(hist.map(h => ({ deal_id: h.deal_id, stage_external_id: `${dealPipe.get(h.deal_id)}|${h.value}`, effective_at: h.effective_at })), { asOf, windowDays: ruleset.thresholds.stalled_window_days })
 
@@ -112,6 +112,15 @@ export async function evaluateOrg({ store, orgId, asOf = new Date().toISOString(
   }
   await insertChunked(store, 'revenue_findings', upserts, { onConflict: 'organization_id,deal_id,rule_key' })
   for (const r of resolves) await store.update('revenue_findings', { organization_id: orgId, deal_id: r.deal_id, rule_key: r.rule_key, status: 'open' }, { status: 'resolved', resolved_at: asOf })
+  // A deal that closed, was archived or left the analyzed pipelines is no longer a risk. Its findings are resolved
+  // (kept as history, evidence intact) so Ask/Brief never cite a won deal. Deals whose open state is merely UNKNOWN
+  // are left alone: unknown never resolves anything.
+  if (syncOk) {
+    const openIds = new Set(evals.filter(e => e.isOpen).map(e => e.deal.id))
+    const unknownIds = new Set(evals.filter(e => (e.deal.stage_id ? stageById.get(e.deal.stage_id)?.is_closed : null) == null).map(e => e.deal.id))
+    const gone = oldFindings.filter(f => f.status === 'open' && !openIds.has(f.deal_id) && !unknownIds.has(f.deal_id)).map(f => f.id)
+    for (let i = 0; i < gone.length; i += 100) await store.update('revenue_findings', { organization_id: orgId, id: { in: gone.slice(i, i + 100) } }, { status: 'resolved', resolved_at: asOf })
+  }
 
   // snapshot (unfiltered baseline; filtered views are computed live from the same items)
   const agg = aggregate(evals.map(e => ({ id: e.deal.id, amount: e.amount, currency: e.currency, is_open: e.isOpen, evaluation: e.evaluation })))

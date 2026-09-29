@@ -9,7 +9,7 @@ import { HttpError, sanitizeError, applyCors, badRequest, errorBody, forbidden, 
 import { resolveContext, requireCan, requireFlag, getFlags } from './auth.js'
 import { createOpenAIProvider } from './ai/openai.js'
 import { startConnect, handleCallback, connectionStatus, disconnect } from './revenue/connect.js'
-import { getOnboarding, saveOnboarding, publishRuleset } from './revenue/onboarding.js'
+import { getOnboarding, saveOnboarding, publishRuleset, getRules } from './revenue/onboarding.js'
 import { overview, listFindings, listDeals, dealDetail, parseFilters, setFindingPreference } from './revenue/queries.js'
 import { askIntegro } from './revenue/ask.js'
 import { createProposal, editProposal, approveProposal, rejectProposal } from './revenue/actions.js'
@@ -68,6 +68,7 @@ export function createHandler(overrides = {}) {
   // ── onboarding / rules ────────────────────────────────────────────────────
   route('GET', 'revenue/onboarding', { auth: 'user', flag: 'revenue_mvp_enabled', role: 'view' }, async ({ ctx }) => ({ status: 200, body: await getOnboarding({ store, orgId: ctx.orgId }) }))
   route('POST', 'revenue/onboarding', { auth: 'user', flag: 'revenue_mvp_enabled' }, async ({ ctx, body, rid }) => ({ status: 200, body: await saveOnboarding({ store, ctx, body, requestId: rid }) }))
+  route('GET', 'revenue/rules', { auth: 'user', flag: 'revenue_mvp_enabled', role: 'view' }, async ({ ctx }) => ({ status: 200, body: await getRules({ store, orgId: ctx.orgId }) }))
   route('POST', 'revenue/rules', { auth: 'user', flag: 'revenue_mvp_enabled' }, async ({ ctx, body, rid }) => ({ status: 201, body: await publishRuleset({ store, ctx, body, requestId: rid }) }))
 
   // ── sync & jobs ───────────────────────────────────────────────────────────

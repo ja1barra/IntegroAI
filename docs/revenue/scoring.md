@@ -33,7 +33,7 @@ Code: `api/_lib/rules/*` (engine v`1.0.0`). Tests: `test/rules/engine.test.js`.
 * Overview, Findings and Deals all read the same snapshot (id + `as_of` + rules version) and share filters.
 
 ## Findings lifecycle
-Created/kept open while triggered; resolved **only** when new evidence says `clear`/`not_applicable`; `unknown` and failed/partial syncs never resolve anything. Dismiss/snooze are stored separately (`revenue_finding_preferences`, reason required) and only hide the finding: evidence and score are unchanged (tested).
+Created/kept open while triggered; **resolved (history kept) when the deal closes, is archived or leaves the analyzed pipelines**; resolved **only** when new evidence says `clear`/`not_applicable`; `unknown` and failed/partial syncs never resolve anything. Dismiss/snooze are stored separately (`revenue_finding_preferences`, reason required) and only hide the finding: evidence and score are unchanged (tested).
 
 ## Known limits
 Weights and thresholds are unvalidated heuristics. Coverage/`unknown` handling deliberately makes the score more conservative than a naive one. Stage benchmarks need ≥20 completed intervals per pipeline+stage within 180 days.

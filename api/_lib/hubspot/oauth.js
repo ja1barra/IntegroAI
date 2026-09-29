@@ -38,7 +38,10 @@ async function tokenRequest(config, params, fetchImpl) {
   if (!res.ok) {
     const err = new Error(`HubSpot token endpoint ${res.status}${json?.status ? ` (${json.status})` : ''}`)
     err.status = res.status
-    err.invalidGrant = res.status === 400 || res.status === 401 || /BAD_REFRESH_TOKEN|BAD_AUTH_CODE|invalid_grant/i.test(JSON.stringify(json))
+    // Only a rejected GRANT means "the customer must re-authorize". A wrong client id/secret or redirect URI
+    // (also 400/401) is OUR misconfiguration and must not flip every connection to reconnect_required.
+    err.invalidGrant = /BAD_REFRESH_TOKEN|BAD_AUTH_CODE|EXPIRED_REFRESH_TOKEN|invalid_grant/i.test(JSON.stringify(json))
+    err.clientMisconfigured = !err.invalidGrant && [400, 401, 403].includes(res.status)
     err.retryable = res.status >= 500 || res.status === 429
     throw err
   }

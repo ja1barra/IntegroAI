@@ -122,6 +122,19 @@ export async function executeAction({ store, orgId, executionId, getClient, now 
   const b = Array.isArray(begin) ? begin[0] : begin
   if (b.result !== 'started') { log('warn', 'action.not_started', { execution_id: executionId, result: b.result }); return { outcome: b.result } }
 
+  // From here the execution is 'running'. ANY unexpected exception must settle it, otherwise the proposal would
+  // sit in 'executing' forever. Before the write nothing changed remotely => failed; after it => outcome uncertain.
+  let writeStarted = false
+  try {
+    return await runExecution()
+  } catch (e) {
+    log('error', 'action.execute_error', { org_id: orgId, execution_id: executionId, write_started: writeStarted })
+    const status = writeStarted ? 'needs_review' : 'failed'
+    await finish(store, orgId, executionId, status, { uncertain: writeStarted, error: `unexpected error: ${sanitizeError(e, 120)}` }).catch(() => {})
+    return { outcome: status }
+  }
+
+  async function runExecution() {
   const [proposal] = await store.select('revenue_action_proposals', { where: { id: b.proposal_id, organization_id: orgId } })
   const [exec] = await store.select('revenue_action_executions', { where: { id: executionId, organization_id: orgId } })
   const fail = async (status, error, extra = {}) => { await finish(store, orgId, executionId, status, { error, ...extra }); return { outcome: status } }
@@ -163,6 +176,7 @@ export async function executeAction({ store, orgId, executionId, getClient, now 
 
     // 5. write
     const key = exec.idempotency_key
+    writeStarted = true
     if (proposal.kind === 'create_task') {
       const p = proposal.payload
       const created = await client.post('/crm/v3/objects/tasks', {
@@ -194,6 +208,7 @@ export async function executeAction({ store, orgId, executionId, getClient, now 
     await finish(store, orgId, executionId, 'needs_review', { uncertain: true, error: `outcome unknown after ${e?.name ?? 'error'}: ${sanitizeError(e, 120)}` })
     await store.rpc('rv_enqueue_job', { _org: orgId, _kind: 'reconcile', _payload: { execution_id: executionId }, _dedupe: `reconcile:${executionId}`, _run_after: new Date(now() + 10 * 60_000).toISOString(), _max_attempts: 6, _created_by: null })
     return { outcome: 'needs_review' }
+  }
   }
 }
 

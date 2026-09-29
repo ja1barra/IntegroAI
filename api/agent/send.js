@@ -11,7 +11,7 @@
  * credential (same pattern as the other /api proxies). No secrets here.
  */
 
-import { getAuthedUser, legacyOutreachEnabledFor, LEGACY_DISABLED } from './_provider.js'
+import { getAuthedUser, legacyOutreachEnabledFor, LEGACY_DISABLED, LEGACY_UNAVAILABLE } from './_provider.js'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -75,7 +75,9 @@ export default async function handler(req, res) {
   // Deny by default: previously this endpoint accepted any caller.
   const auth = await getAuthedUser(req)
   if (!auth) return res.status(401).json({ error: 'Sign in required' })
-  if (!(await legacyOutreachEnabledFor(auth))) return res.status(LEGACY_DISABLED.status).json(LEGACY_DISABLED.body)
+  const legacyOk = await legacyOutreachEnabledFor(auth)
+  if (legacyOk === null) return res.status(LEGACY_UNAVAILABLE.status).json(LEGACY_UNAVAILABLE.body)
+  if (!legacyOk) return res.status(LEGACY_DISABLED.status).json(LEGACY_DISABLED.body)
 
   const { provider, accessToken, from, to, subject, body } = req.body ?? {}
 

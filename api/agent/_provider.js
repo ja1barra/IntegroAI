@@ -36,9 +36,13 @@ export async function getAuthedUser(req) {
 // Server-side kill switch: tenants migrated to Revenue Manager
 // (revenue_org_flags.legacy_outreach_enabled = false) cannot use the SDR /
 // outreach / send endpoints, regardless of what the client UI shows.
+// Returns true (allowed), false (blocked) or null when the gate itself could not be evaluated. Callers must
+// answer 503 for null (fail closed) instead of crashing.
 export async function legacyOutreachEnabledFor(auth) {
-  return legacyOutreachAllowed(auth.userId, createPostgrestStore(cfg()))
+  try { return await legacyOutreachAllowed(auth.userId, createPostgrestStore(cfg())) } catch { return null }
 }
+
+export const LEGACY_UNAVAILABLE = { status: 503, body: { error: 'Service temporarily unavailable. Please try again.', code: 'dependency_unavailable' } }
 
 export const LEGACY_DISABLED = {
   status: 403,

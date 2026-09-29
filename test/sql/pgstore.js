@@ -79,6 +79,11 @@ export function createPgStore(db) {
       const sql = `update public.${q(table)} set ${sets.join(',')}${whereSql(where, params)} returning *`
       return norm((await db.query(sql, params)).rows)
     },
+    async delete(table, where) {
+      if (!where || !Object.keys(where).length) throw new Error('delete requires a where clause')
+      const params = []
+      return norm((await db.query(`delete from public.${q(table)}${whereSql(where, params)} returning *`, params)).rows)
+    },
     async rpc(fn, args = {}) {
       const keys = Object.keys(args)
       // PostgREST maps JSON arrays to text[] RPC args; only plain objects are jsonb here

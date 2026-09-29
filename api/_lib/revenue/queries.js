@@ -189,7 +189,7 @@ export async function dealDetail({ store, orgId, dealId, now = new Date().toISOS
   ]).then(r => r.map(x => x[0] ?? null))
   const [evaluation] = await store.select('revenue_evaluations', { where: { organization_id: orgId, deal_id: dealId }, order: 'created_at.desc', limit: 1 })
   const findings = await store.select('revenue_findings', { where: { organization_id: orgId, deal_id: dealId }, order: 'first_seen_at.desc' })
-  const prefs = new Map((await store.select('revenue_finding_preferences', { where: { organization_id: orgId } })).map(p => [p.finding_id, p]))
+  const prefs = new Map(findings.length ? (await store.select('revenue_finding_preferences', { where: { organization_id: orgId, finding_id: { in: findings.map(f => f.id) } } })).map(p => [p.finding_id, p]) : [])
   const links = await store.select('crm_associations', { where: { organization_id: orgId, deleted_at: { isnull: true }, to_external_id: deal.external_id, to_type: 'deal' }, columns: 'from_type,from_external_id', limit: 300 })
   const contactLinks = await store.select('crm_associations', { where: { organization_id: orgId, deleted_at: { isnull: true }, from_type: 'deal', from_external_id: deal.external_id, to_type: 'contact' }, columns: 'to_external_id', limit: 100 })
   const contacts = contactLinks.length ? await store.select('crm_contacts', { where: { organization_id: orgId, external_id: { in: contactLinks.map(c => c.to_external_id) } }, columns: 'external_id,first_name,last_name,job_title' }) : []
@@ -216,8 +216,9 @@ export async function setFindingPreference({ store, ctx, findingId, state, reaso
   const [f] = await store.select('revenue_findings', { where: { id: findingId, organization_id: ctx.orgId } })
   if (!f) throw notFound('Finding not found')
   if (state === 'clear') {
-    await store.rpc('rv_audit', { _org: ctx.orgId, _actor_type: 'user', _actor: ctx.userId, _event: 'finding.preference_cleared', _entity_type: 'finding', _entity_id: findingId, _before: null, _after: null, _request_id: requestId ?? null })
-    await store.update('revenue_finding_preferences', { organization_id: ctx.orgId, finding_id: findingId }, { state: 'snoozed', until: new Date(0).toISOString(), reason: 'cleared', actor_user_id: ctx.userId })
+    const [prev] = await store.select('revenue_finding_preferences', { where: { organization_id: ctx.orgId, finding_id: findingId } })
+    if (prev) await store.delete('revenue_finding_preferences', { organization_id: ctx.orgId, finding_id: findingId })
+    await store.rpc('rv_audit', { _org: ctx.orgId, _actor_type: 'user', _actor: ctx.userId, _event: 'finding.preference_cleared', _entity_type: 'finding', _entity_id: findingId, _before: prev ? { state: prev.state, reason: prev.reason, until: prev.until } : null, _after: null, _request_id: requestId ?? null })
     return { ok: true }
   }
   if (!['dismissed', 'snoozed'].includes(state)) throw badRequest('state must be dismissed or snoozed')

@@ -163,28 +163,45 @@ function OnboardingForm({ ob, isAdmin, onSaved, addToast }: { ob: Onboarding; is
   )
 }
 
+interface RulesResponse { version: number; thresholds: { inactivity_days: number; stalled_multiplier: number; single_contact_min_amount: Record<string, string> } }
+
 function RulesForm({ currency, addToast }: { currency: string; addToast: RevenueViewProps['addToast'] }) {
-  const [days, setDays] = useState('14')
-  const [mult, setMult] = useState('1.5')
-  const [amount, setAmount] = useState('20000')
+  const rules = useApi<RulesResponse>('revenue/rules', {}, true)
+  const [days, setDays] = useState('')
+  const [mult, setMult] = useState('')
+  const [amount, setAmount] = useState('')
   const [busy, setBusy] = useState(false)
+  // prefill from the ACTIVE rules (never hard-coded defaults), so publishing cannot silently reset earlier tuning
+  useEffect(() => {
+    const r = rules.data
+    if (!r) return
+    setDays(String(r.thresholds.inactivity_days)); setMult(String(r.thresholds.stalled_multiplier)); setAmount(r.thresholds.single_contact_min_amount[currency] ?? '')
+  }, [rules.data, currency])
   const save = async () => {
     setBusy(true)
     try {
-      const r = await api<{ version: number; note: string }>('revenue/rules', { method: 'POST', body: { thresholds: { inactivity_days: Number(days), stalled_multiplier: Number(mult), single_contact_min_amount: { [currency]: amount } } } })
-      addToast(`Rules v${r.version} published. ${r.note}`)
+      const single = amount.trim() ? { single_contact_min_amount: { [currency]: amount.trim() } } : {}
+      const r = await api<{ version: number; note: string }>('revenue/rules', { method: 'POST', body: { thresholds: { inactivity_days: Number(days), stalled_multiplier: Number(mult), ...single } } })
+      addToast(`Rules v${r.version} published. ${r.note}`); rules.reload()
     } catch (e) { addToast(e instanceof ApiError ? e.message : 'Failed', 'error') } finally { setBusy(false) }
   }
   return (
     <section className="card rv-step" aria-labelledby="st-rules">
       <h2 id="st-rules" className="rv-h2">{t('settings.step.rules')}</h2>
-      <p className="rv-muted">Starting points, not validated benchmarks. Publishing creates a new immutable version and re-evaluates; snapshots from different versions are not directly comparable.</p>
-      <div className="rv-row">
-        <div className="form-group"><label className="form-label" htmlFor="r-days">Inactivity threshold (days)</label><input id="r-days" className="form-input" type="number" min={1} value={days} onChange={e => setDays(e.target.value)} /></div>
-        <div className="form-group"><label className="form-label" htmlFor="r-mult">Stalled-stage multiplier (× median)</label><input id="r-mult" className="form-input" type="number" step="0.1" min={1} value={mult} onChange={e => setMult(e.target.value)} /></div>
-        <div className="form-group"><label className="form-label" htmlFor="r-amt">Single-contact minimum amount ({currency})</label><input id="r-amt" className="form-input" inputMode="decimal" value={amount} onChange={e => setAmount(e.target.value)} /></div>
-      </div>
-      <button className="btn-sm btn-sm-primary" disabled={busy} onClick={save}>Publish new rules version</button>
+      <p className="rv-muted">Starting points, not validated benchmarks. Publishing creates a new immutable version and re-evaluates; snapshots from different versions are not directly comparable. Other currencies keep their thresholds.</p>
+      {rules.loading && !rules.data && <Loading />}
+      {rules.error && <ErrorBox error={rules.error} onRetry={rules.reload} />}
+      {rules.data && (
+        <>
+          <div className="rv-muted">Active version: v{rules.data.version || 'default (not yet published)'}</div>
+          <div className="rv-row">
+            <div className="form-group"><label className="form-label" htmlFor="r-days">Inactivity threshold (days)</label><input id="r-days" className="form-input" type="number" min={1} value={days} onChange={e => setDays(e.target.value)} /></div>
+            <div className="form-group"><label className="form-label" htmlFor="r-mult">Stalled-stage multiplier (× median)</label><input id="r-mult" className="form-input" type="number" step="0.1" min={1} value={mult} onChange={e => setMult(e.target.value)} /></div>
+            <div className="form-group"><label className="form-label" htmlFor="r-amt">Single-contact minimum amount ({currency})</label><input id="r-amt" className="form-input" inputMode="decimal" value={amount} placeholder="not set" onChange={e => setAmount(e.target.value)} /></div>
+          </div>
+          <button className="btn-sm btn-sm-primary" disabled={busy || !days || !mult} onClick={save}>Publish new rules version</button>
+        </>
+      )}
     </section>
   )
 }

@@ -6,7 +6,7 @@
 // ever deleted because it was absent from a page; archival is learned only from
 // HubSpot's explicit archived listing.
 
-import { insertChunked } from '../store.js'
+import { insertChunked, selectAll } from '../store.js'
 import { HubSpotForbidden } from './client.js'
 import {
   DEAL_BASE_PROPERTIES, ACTIVITY_TYPES, stageEnteredProp, normalizePipelines, normalizeOwner, normalizeDeal,
@@ -63,9 +63,9 @@ export async function runSync({ store, client, orgId, connectionId, runId, deadl
 
   async function loadMaps() {
     const [pl, st, ow] = await Promise.all([
-      store.select('crm_pipelines', { where: scope, columns: 'id,external_id' }),
-      store.select('crm_stages', { where: scope, columns: 'id,external_id,pipeline_id,is_closed,category' }),
-      store.select('crm_owners', { where: scope, columns: 'id,external_id' }),
+      selectAll(store, 'crm_pipelines', { where: scope, columns: 'id,external_id', order: 'id.asc' }),
+      selectAll(store, 'crm_stages', { where: scope, columns: 'id,external_id,pipeline_id,is_closed,category', order: 'id.asc' }),
+      selectAll(store, 'crm_owners', { where: scope, columns: 'id,external_id', order: 'id.asc' }),
     ])
     return {
       pipelineByExternal: new Map(pl.map(p => [p.external_id, p.id])),
@@ -356,6 +356,8 @@ export async function runSync({ store, client, orgId, connectionId, runId, deadl
     }
     const status = warnings.length ? 'partial' : 'succeeded'
     finalStatus = status
+    // first successful sync after the admin confirmed the setup
+    await store.update('revenue_settings', { organization_id: orgId, onboarding_state: 'confirmed' }, { onboarding_state: 'synced' })
     await save({ status, finished_at: new Date(now()).toISOString() })
     await store.rpc('rv_enqueue_job', { _org: orgId, _kind: 'evaluate', _payload: { sync_run_id: runId }, _dedupe: `evaluate:${runId}`, _run_after: null, _max_attempts: 3, _created_by: null })
   }

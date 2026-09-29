@@ -69,6 +69,11 @@ export async function saveOnboarding({ store, ctx, body, requestId }) {
   return { state }
 }
 
+export async function getRules({ store, orgId }) {
+  const { version, ruleset } = await getActiveRuleset(store, orgId, { createIfMissing: false })
+  return { version, engine_version: ruleset.engine_version, thresholds: ruleset.thresholds, weights: ruleset.weights, min_coverage: ruleset.min_coverage }
+}
+
 export async function publishRuleset({ store, ctx, body, requestId }) {
   requireCan(ctx, 'manage_rules')
   const t = body?.thresholds ?? {}, w = body?.weights ?? {}
@@ -84,7 +89,17 @@ export async function publishRuleset({ store, ctx, body, requestId }) {
   for (const [k, v] of Object.entries(w)) { const n = num(v, 0, 100, `weights.${k}`); if (!(k in mergeRuleset({}).weights)) throw badRequest(`Unknown rule ${k}`); cfg.weights[k] = n }
   const cur = await getActiveRuleset(store, ctx.orgId)
   const next = cur.version + 1
-  const config = mergeRuleset({ ...cur.ruleset, thresholds: { ...cur.ruleset.thresholds, ...cfg.thresholds }, weights: { ...cur.ruleset.weights, ...cfg.weights } })
+  // Merge per key, including the per-currency / per-stage maps: publishing one currency must not erase the others.
+  const th = cur.ruleset.thresholds
+  const config = mergeRuleset({
+    ...cur.ruleset,
+    thresholds: {
+      ...th, ...cfg.thresholds,
+      single_contact_min_amount: { ...th.single_contact_min_amount, ...(cfg.thresholds.single_contact_min_amount ?? {}) },
+      manual_stage_days: { ...th.manual_stage_days, ...(cfg.thresholds.manual_stage_days ?? {}) },
+    },
+    weights: { ...cur.ruleset.weights, ...cfg.weights },
+  })
   await store.insert('revenue_rule_sets', [{ organization_id: ctx.orgId, version: next, engine_version: ENGINE_VERSION, config, created_by: ctx.userId }])
   await store.rpc('rv_audit', { _org: ctx.orgId, _actor_type: 'user', _actor: ctx.userId, _event: 'rules.published', _entity_type: 'rule_set', _entity_id: String(next), _before: { version: cur.version }, _after: { version: next, thresholds: cfg.thresholds, weights: cfg.weights }, _request_id: requestId ?? null })
   await enqueue(store, { orgId: ctx.orgId, kind: 'evaluate', payload: {}, dedupe: `evaluate:rules:${next}`, maxAttempts: 3, userId: ctx.userId })

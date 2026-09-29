@@ -877,6 +877,8 @@ begin
    where organization_id = _org and status in ('queued','running') and kind in ('sync','reconcile','execute_action','evaluate');
   update public.revenue_action_proposals set status = 'cancelled'
    where organization_id = _org and status in ('proposed','approved');
+  update public.revenue_sync_runs set status = 'cancelled', error = 'connection disconnected', finished_at = now()
+   where organization_id = _org and status in ('queued','running');
   perform public.rv_audit(_org, 'user', _actor, 'hubspot.disconnected', 'crm_connection', _conn::text, null, null, _request_id);
   return true;
 end $$;

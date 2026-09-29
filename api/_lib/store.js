@@ -4,7 +4,8 @@
 //   select(table, { where, columns, order, limit, offset }) -> rows
 //   insert(table, rows, { onConflict, ignoreDuplicates })   -> rows (returned)
 //   update(table, where, patch)                              -> rows
-//   rpc(fn, args)                                            -> rows | scalar
+//   delete(table, where)                                     -> rows (a non-empty `where` is required)
+//   rpc(fn, args)                                           -> rows | scalar
 //
 // `where` values: scalar (eq) | { in: [...] } | { gte } | { lte } | { gt } | { lt } | { neq } | { isnull: bool }
 //
@@ -41,6 +42,7 @@ export function createPostgrestStore(config, fetchImpl = fetch) {
       async select() { throw unavailable('Server data store is not configured') },
       insert: async () => { throw unavailable('Server data store is not configured') },
       update: async () => { throw unavailable('Server data store is not configured') },
+      delete: async () => { throw unavailable('Server data store is not configured') },
       rpc: async () => { throw unavailable('Server data store is not configured') },
     }
   }
@@ -88,6 +90,11 @@ export function createPostgrestStore(config, fetchImpl = fetch) {
     async update(table, where, patch) {
       const params = new URLSearchParams(qs(where))
       return (await call('PATCH', `/${table}?${params}`, { body: patch, extra: { Prefer: 'return=representation' } })) ?? []
+    },
+    async delete(table, where) {
+      if (!where || !Object.keys(where).length) throw new Error('delete requires a where clause')
+      const params = new URLSearchParams(qs(where))
+      return (await call('DELETE', `/${table}?${params}`, { extra: { Prefer: 'return=representation' } })) ?? []
     },
     async rpc(fn, args = {}) {
       return await call('POST', `/rpc/${fn}`, { body: args })

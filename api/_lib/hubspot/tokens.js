@@ -44,6 +44,7 @@ export function createTokenProvider({ store, config, connectionId, orgId, worker
             await store.rpc('rv_release_refresh_lease', { _conn: connectionId, _worker: workerId })
             throw new ReconnectRequired('HubSpot refresh token was rejected')
           }
+          if (e.clientMisconfigured) throw new HttpError(503, 'dependency_unavailable', "HubSpot rejected this app's client credentials; check HUBSPOT_CLIENT_ID / HUBSPOT_CLIENT_SECRET")
           if (attempt >= 2 || !e.retryable) throw e
           await sleep(400 * 2 ** attempt)
         }
