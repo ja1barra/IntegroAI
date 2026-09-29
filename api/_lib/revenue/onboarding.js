@@ -100,7 +100,7 @@ export async function publishRuleset({ store, ctx, body, requestId }) {
     cfg.thresholds.single_contact_min_amount = Object.fromEntries(Object.entries(t.single_contact_min_amount).map(([k, v]) => [k, String(v)]))
   }
   if (t.manual_stage_days !== undefined) { for (const [k, v] of Object.entries(t.manual_stage_days)) if (!(Number(v) > 0)) throw badRequest(`manual_stage_days.${k} must be > 0`); cfg.thresholds.manual_stage_days = Object.fromEntries(Object.entries(t.manual_stage_days).map(([k, v]) => [k, Number(v)])) }
-  for (const [k, v] of Object.entries(w)) { const n = num(v, 0, 100, `weights.${k}`); if (!(k in mergeRuleset({}).weights)) throw badRequest(`Unknown rule ${k}`); cfg.weights[k] = n }
+  for (const [k, v] of Object.entries(w)) { const n = num(v, 0, 100, `weights.${k}`); if (!(k in mergeRuleset({}).weights)) throw badRequest(`Unknown rule ${k}`); if (!Number.isInteger(n)) throw badRequest(`weights.${k} must be a whole number`); cfg.weights[k] = n }
   const cur = await getActiveRuleset(store, ctx.orgId)
   const next = cur.version + 1
   // Merge per key, including the per-currency / per-stage maps: publishing one currency must not erase the others.

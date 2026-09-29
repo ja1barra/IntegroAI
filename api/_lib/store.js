@@ -119,3 +119,6 @@ export async function selectAll(store, table, opts = {}, page = 1000) {
     if (rows.length < page) return out
   }
 }
+
+// Max items in one `in.(…)` filter: keeps the GET URL well under typical gateway limits (~8 KB).
+export const IN_CHUNK = 50

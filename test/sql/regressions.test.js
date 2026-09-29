@@ -13,7 +13,6 @@ import { publishRuleset, getRules } from '../../api/_lib/revenue/onboarding.js'
 import { createProposal, approveProposal, executeAction } from '../../api/_lib/revenue/actions.js'
 import { createTokenProvider } from '../../api/_lib/hubspot/tokens.js'
 import { encrypt } from '../../api/_lib/crypto.js'
-import { legacyOutreachAllowed } from '../../api/_lib/auth.js'
 import { HttpError } from '../../api/_lib/http.js'
 
 let db, store, A, config
@@ -128,14 +127,6 @@ test('an unexpected exception during execution settles the execution (never stra
   void readBoom
 })
 
-test('legacy gate: fail-closed semantics', async () => {
-  const boom = { configured: true, rpc: async () => { throw new HttpError(503, 'dependency_unavailable', 'down') } }
-  await assert.rejects(legacyOutreachAllowed('u', boom), e => e.status === 503)                       // callers translate to 503
-  assert.equal(await legacyOutreachAllowed('u', { configured: false }, { strict: false }), true)      // pre-migration install
-  await assert.rejects(legacyOutreachAllowed('u', { configured: false }, { strict: true }), e => e.status === 503)
-  assert.equal(await legacyOutreachAllowed('u', { configured: true, rpc: async () => false }), false)
-})
-
 test('review round 2: changing the analyzed pipelines resets the deals watermark', async () => {
   const ctx = { orgId: A.orgId, userId: A.user, role: 'admin' }
   await store.insert('revenue_sync_cursors', [{ organization_id: A.orgId, connection_id: (await store.select('crm_connections', { where: { organization_id: A.orgId, status: { neq: 'disconnected' } } }))[0].id, object_type: 'deals', high_watermark: asOf, status: 'idle' }], { onConflict: 'organization_id,connection_id,object_type' })
@@ -207,4 +198,75 @@ test('review round 2: HubSpot client forces a token refresh only right after a 4
   const c = createHubSpotClient({ getToken: async ({ force }) => { forced.push(!!force); return 't' }, fetchImpl, sleep: async () => {}, random: () => 0 })
   assert.deepEqual(await c.get('/x'), { ok: true })
   assert.deepEqual(forced, [false, true, false])                                                          // 401 -> forced once; the 429 retry does not force again
+})
+
+test('review round 3: a crashed execute_action job is re-claimable and settles as needs_review (never stuck, never re-run)', async () => {
+  await db.query(`update public.crm_connections set status = 'active' where status <> 'disconnected'`)
+  const p = await createProposal({ store, ctx: { orgId: A.orgId, userId: A.user, role: 'member' }, dealId: A.dealId('d2'), kind: 'create_task', payload: { subject: 's', body: '', due_at: new Date(Date.now() + 3600_000).toISOString() } })
+  const ap = await approveProposal({ store, ctx: { orgId: A.orgId, userId: A.user, role: 'admin' }, proposalId: p.id, version: 1, hash: p.payload_hash })
+  await db.query(`delete from private.revenue_jobs where kind <> 'execute_action'`)
+  const job1 = (await store.rpc('rv_claim_job', { _worker: 'w1', _lease_seconds: 60, _kinds: ['execute_action'], _org: A.orgId }))[0]
+  assert.equal(job1.max_attempts, 3)
+  await store.rpc('rv_begin_execution', { _org: A.orgId, _exec: ap.execution_id })                    // worker 1 started, then died
+  await db.query(`update private.revenue_jobs set lease_until = now() - interval '1 second' where id = $1`, [job1.id])
+  const job2 = (await store.rpc('rv_claim_job', { _worker: 'w2', _lease_seconds: 60, _kinds: ['execute_action'], _org: A.orgId }))[0]
+  assert.equal(job2.id, job1.id); assert.equal(job2.reclaimed, true)                                   // NOT dead-lettered
+  const posts = []
+  const client = { get: async () => ({ id: '1', properties: {} }), post: async (path) => { posts.push(path); return { id: 't' } }, request: async () => ({}) }
+  const r = await executeAction({ store, orgId: A.orgId, executionId: ap.execution_id, getClient: async () => client })
+  assert.equal(r.outcome, 'needs_review'); assert.equal(posts.length, 0)
+  assert.equal((await store.select('revenue_action_proposals', { where: { id: p.id } }))[0].status, 'needs_review')
+})
+
+test('review round 3: a failure BEFORE the write (precondition read unreachable) is a clean failure, not "outcome uncertain"', async () => {
+  const { HubSpotError } = await import('../../api/_lib/hubspot/client.js')
+  const p = await createProposal({ store, ctx: { orgId: A.orgId, userId: A.user, role: 'member' }, dealId: A.dealId('d2'), kind: 'create_task', payload: { subject: 's2', body: '', due_at: new Date(Date.now() + 3600_000).toISOString() } })
+  const ap = await approveProposal({ store, ctx: { orgId: A.orgId, userId: A.user, role: 'admin' }, proposalId: p.id, version: 1, hash: p.payload_hash })
+  const posts = []
+  const client = { get: async () => { throw new HubSpotError(0, 'HubSpot unreachable', { retryable: true }) }, post: async (path) => { posts.push(path); return { id: 't' } }, request: async () => ({}) }
+  const r = await executeAction({ store, orgId: A.orgId, executionId: ap.execution_id, getClient: async () => client })
+  assert.equal(r.outcome, 'failed'); assert.equal(posts.length, 0)
+  const ex = (await store.select('revenue_action_executions', { where: { id: ap.execution_id } }))[0]
+  assert.equal(ex.uncertain, false)
+  assert.equal((await db.query(`select count(*)::int c from private.revenue_jobs where kind='reconcile' and dedupe_key = $1`, ['reconcile:' + ap.execution_id])).rows[0].c, 0)   // no phantom reconcile job
+})
+
+test('review round 3: fractional rule weights are rejected (health is an integer)', async () => {
+  const ctx = { orgId: A.orgId, userId: A.user, role: 'admin' }
+  await assert.rejects(publishRuleset({ store, ctx, body: { weights: { inactivity: 12.5 } } }), e => e.status === 400)
+  await publishRuleset({ store, ctx, body: { weights: { inactivity: 25 } } })
+})
+
+test('review round 3: a transient AI failure is not cached as the final brief; a good retry replaces it', async () => {
+  const { generateBrief } = await import('../../api/_lib/revenue/brief.js')
+  const { AIUnavailable } = await import('../../api/_lib/ai/openai.js')
+  await store.update('revenue_org_flags', { organization_id: A.orgId }, { revenue_mvp_enabled: true, managed_ai_enabled: true })
+  await store.update('revenue_settings', { organization_id: A.orgId }, { ai_monthly_token_budget: 2000000, ai_requests_per_hour: 100 })
+  await evaluateOrg({ store, orgId: A.orgId, asOf: new Date(NOW + 900_000).toISOString() })
+  const failing = { available: true, model: 'm', respond: async () => { throw new AIUnavailable('timeout', 'slow') } }
+  const first = await generateBrief({ store, ai: failing, orgId: A.orgId, period: 'daily', requestId: 'r' })
+  assert.equal(first.brief.content.ai.status, 'unavailable')
+  const good = { available: true, model: 'm', respond: async () => ({ status: 'completed', text: JSON.stringify({ headline: 'ok', summary: 'fine', priorities: [] }), toolCalls: [], refusal: null, output: [], usage: { input: 1, output: 1, cached: 0 } }) }
+  const second = await generateBrief({ store, ai: good, orgId: A.orgId, period: 'daily', requestId: 'r2' })
+  assert.equal(second.cached, false); assert.equal(second.brief.id, first.brief.id); assert.equal(second.brief.content.ai.status, 'ok')
+  assert.equal((await generateBrief({ store, ai: good, orgId: A.orgId, period: 'daily', requestId: 'r3' })).cached, true)   // final now
+})
+
+test('review round 3: evaluation ids are looked up exactly — long evaluation history cannot drop deals from the snapshot', async () => {
+  const d = A.dealId('d2')
+  const rows = Array.from({ length: 1200 }, (_, i) => ({ organization_id: A.orgId, deal_id: d, rules_version: 1, as_of: asOf, input_hash: 'old-' + i, health: 100, coverage: 1, eligible: true, provisional: false, band: 'healthy', results: [] }))
+  for (let i = 0; i < rows.length; i += 200) await store.insert('revenue_evaluations', rows.slice(i, i + 200))
+  const res = await evaluateOrg({ store, orgId: A.orgId, asOf: new Date(NOW + 1_200_000).toISOString() })
+  const items = await store.select('revenue_snapshot_items', { where: { snapshot_id: res.snapshotId } })
+  assert.ok(items.some(i => i.deal_id === d))
+  assert.equal(items.length, res.open)
+})
+
+test('review round 3: poison records (bad currency / absurd amount) are sanitized; a bad row is isolated, not fatal', async () => {
+  const { normalizeDeal } = await import('../../api/_lib/hubspot/mapping.js')
+  const maps = { stageByExternal: new Map(), pipelineByExternal: new Map(), ownerByExternal: new Map(), defaultCurrency: 'USD' }
+  const bad = normalizeDeal({ id: '9', properties: { dealname: 'x', amount: '123456789012345678901', deal_currency_code: 'US' } }, maps)
+  assert.equal(bad.amount, null); assert.equal(bad.currency, null); assert.equal(bad.field_states.currency, 'unknown')
+  const ok = normalizeDeal({ id: '10', properties: { amount: '10.5', deal_currency_code: 'eur' } }, maps)
+  assert.equal(ok.currency, 'EUR'); assert.equal(ok.amount, '10.5')
 })

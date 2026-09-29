@@ -9,6 +9,10 @@ import { HttpError } from '../http.js'
 const SKEW_MS = 120_000
 
 export function createTokenProvider({ store, config, connectionId, orgId, workerId, fetchImpl = fetch, sleep = ms => new Promise(r => setTimeout(r, ms)), now = () => Date.now() }) {
+  // Decrypted token kept in memory until shortly before it expires: a sync makes thousands of HubSpot calls and
+  // must not do a credentials round trip (RPC + AES) for each one.
+  let cached = null // { token, expiresAt: ms }
+
   async function readCreds() {
     const rows = await store.rpc('rv_get_credentials', { _conn: connectionId })
     const row = Array.isArray(rows) ? rows[0] : rows
@@ -16,11 +20,16 @@ export function createTokenProvider({ store, config, connectionId, orgId, worker
     if (row.organization_id !== orgId) throw new HttpError(403, 'forbidden', 'Connection does not belong to this organization')
     return row
   }
+  const remember = row => { const token = decrypt(row.access_token_enc, config.encryption); cached = { token, expiresAt: new Date(row.expires_at).getTime() }; return token }
 
   return async function getToken({ force = false } = {}) {
+    if (!force && cached && cached.expiresAt - SKEW_MS > now()) return cached.token
+    const rejectedExpiry = force ? cached?.expiresAt : undefined
+    // acceptable = still valid, and — when a 401 forced us here — NOT the token that was just rejected
+    // (a token refreshed meanwhile by another worker has a different expiry and is accepted).
+    const acceptable = r => new Date(r.expires_at).getTime() - SKEW_MS > now() && (!force || new Date(r.expires_at).getTime() !== rejectedExpiry)
     let row = await readCreds()
-    const fresh = r => new Date(r.expires_at).getTime() - SKEW_MS > now()
-    if (!force && fresh(row)) return decrypt(row.access_token_enc, config.encryption)
+    if (acceptable(row)) return remember(row)
 
     for (let i = 0; i < 8; i++) {
       const got = await store.rpc('rv_acquire_refresh_lease', { _conn: connectionId, _worker: workerId, _seconds: 30 })
@@ -28,12 +37,12 @@ export function createTokenProvider({ store, config, connectionId, orgId, worker
       // someone else is refreshing: wait for their result instead of double-refreshing
       await sleep(500)
       row = await readCreds()
-      if (!force && fresh(row)) return decrypt(row.access_token_enc, config.encryption)
+      if (acceptable(row)) return remember(row)
       if (i === 7) throw new HttpError(503, 'dependency_unavailable', 'Token refresh is in progress elsewhere; retry shortly')
     }
     try {
       row = await readCreds() // may have been refreshed between our check and the lease
-      if (!force && fresh(row)) { await store.rpc('rv_release_refresh_lease', { _conn: connectionId, _worker: workerId }); return decrypt(row.access_token_enc, config.encryption) }
+      if (acceptable(row)) { await store.rpc('rv_release_refresh_lease', { _conn: connectionId, _worker: workerId }); return remember(row) }
       const refreshToken = decrypt(row.refresh_token_enc, config.encryption)
       let t
       for (let attempt = 0; ; attempt++) {
@@ -54,6 +63,7 @@ export function createTokenProvider({ store, config, connectionId, orgId, worker
         _conn: connectionId, _worker: workerId, _access_enc: a.value, _refresh_enc: r.value, _expires_at: t.expiresAt.toISOString(), _key_version: a.keyVersion,
       })
       if (ok !== true) throw new HttpError(503, 'dependency_unavailable', 'Lost the token refresh lease; retry')
+      cached = { token: t.accessToken, expiresAt: t.expiresAt.getTime() }
       return t.accessToken
     } catch (e) {
       if (!(e instanceof ReconnectRequired)) await store.rpc('rv_release_refresh_lease', { _conn: connectionId, _worker: workerId }).catch(() => {})

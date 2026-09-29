@@ -11,7 +11,7 @@
    * Without a scheduler, the UI still works: syncs/briefs/approvals call `POST /api/revenue/worker/kick` (own org, ≤25 s), but nothing runs while nobody has the app open.
    The tick also enqueues an incremental sync for every enabled organization whose setup an admin confirmed and whose last successful sync is older than `REVENUE_AUTO_SYNC_HOURS` (default 6; `0` disables), because rules depend on "today". Briefs are generated on demand only (no automatic daily/weekly generation yet).
    Keep `REVENUE_WORKER_BUDGET_MS` < `functions."api/revenue.js".maxDuration` (60 s in `vercel.json`; Hobby's maximum may be lower on your plan — check).
-6. **Legacy kill switch needs the service key**: `legacy_outreach_enabled=false` is enforced by the legacy `/api/agent/*` endpoints through `SUPABASE_SERVICE_ROLE_KEY`. Without that key the gate cannot be evaluated and the endpoints keep working for everyone (fail-open, only so pre-migration installs do not break) — set it before migrating any tenant.
+6. **Legacy kill switch**: `legacy_outreach_enabled=false` is enforced by the legacy `/api/agent/*` endpoints by calling `rv_my_legacy_outreach_allowed()` with the **caller's own JWT** (no service key needed; it only reveals the caller's own flag). Migration not applied ⇒ endpoint missing ⇒ legacy keeps working; any other failure of the gate ⇒ JSON 503 (**fail closed**).
 7. **Flags per tenant** (`revenue_org_flags`), defaults: everything off except `legacy_outreach_enabled=true`. Limits per tenant in `revenue_settings` (`ai_monthly_token_budget`, `ai_requests_per_hour`, `retention_days_after_disconnect`).
 
 ## Model selection
@@ -33,7 +33,7 @@ select organization_id, sum(coalesce(input_tokens,0)+coalesce(output_tokens,0)) 
 * **Disconnect**: revokes at HubSpot (best effort), deletes credentials, stops jobs, cancels pending proposals. **Data is retained**; the purge job implied by `retention_days_after_disconnect` is **not implemented** (limitation).
 
 ## Known limitations
-No webhooks; no automatic retention purge; evaluation joins are in-memory (sized for portals up to roughly 10⁴ open deals / 10⁵ activities — beyond that, move the joins into SQL); per-org API rate limiting exists only for AI; email drafts are copy-only; Revenue nav is hidden for un-migrated tenants (by design); mobile uses a bottom nav for Revenue only (the pre-existing shell hides its sidebar below 900 px); locale: English is complete, Spanish is partial with English fallback; `lint` has no ESLint config in the repo; HubSpot endpoints unverified against live docs (see hubspot-capabilities.md).
+No webhooks; `revenue_evaluations` grows by at most one row per open deal per day and is not pruned yet (add a retention job before very large portals); no automatic retention purge; evaluation joins are in-memory (sized for portals up to roughly 10⁴ open deals / 10⁵ activities — beyond that, move the joins into SQL); per-org API rate limiting exists only for AI; email drafts are copy-only; Revenue nav is hidden for un-migrated tenants (by design); mobile uses a bottom nav for Revenue only (the pre-existing shell hides its sidebar below 900 px); locale: English is complete, Spanish is partial with English fallback; `lint` has no ESLint config in the repo; HubSpot endpoints unverified against live docs (see hubspot-capabilities.md).
 
 ## Commands
 ```bash

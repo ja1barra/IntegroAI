@@ -98,22 +98,3 @@ export async function getAuthedUser(req, config, fetchImpl) {
     return { token: s.token, supabaseUrl: s.supabaseUrl, anonKey: s.anonKey, userId: s.userId }
   } catch { return null }
 }
-
-// Server-side kill switch for the legacy SDR/outreach endpoints, per tenant.
-// - migrated tenant (flag off)            -> false
-// - gate cannot be evaluated (Supabase down) -> throws (callers must answer 503, i.e. fail CLOSED)
-// - no service key configured             -> true (pre-migration installs keep working) unless
-//   LEGACY_GATE_STRICT=true, in which case it fails closed as well.
-export async function legacyOutreachAllowed(userId, store, { strict = process.env.LEGACY_GATE_STRICT === 'true' } = {}) {
-  if (!store?.configured) {
-    if (strict) throw unavailable('Legacy outreach gate is not configured (SUPABASE_SERVICE_ROLE_KEY)')
-    return true
-  }
-  try {
-    const v = await store.rpc('rv_legacy_outreach_allowed', { _user: userId })
-    return v !== false
-  } catch (e) {
-    if (e instanceof HttpError && e.status === 400 && /does not exist|Could not find the function/i.test(e.message)) return true // migration not applied yet
-    throw e
-  }
-}

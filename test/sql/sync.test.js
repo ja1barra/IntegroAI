@@ -170,3 +170,19 @@ test('archived deals are learned only from the explicit archived listing (full r
   assert.equal(d.archived, true)
   assert.equal((await store.select('crm_deals', { where: { organization_id: orgId, external_id: 'bulk1' } }))[0].archived, false)
 })
+
+test('review round 3: one deal that the database rejects is skipped and reported; the rest of the page lands', async () => {
+  const badStore = { ...store, insert: async (table, rows, opts) => {
+    if (table === 'crm_deals' && rows.some(r => r.external_id === 'poison')) { const { HttpError } = await import('../../api/_lib/http.js'); throw new HttpError(400, 'store_error', 'value too long', { pg_code: '22001' }) }
+    return store.insert(table, rows, opts)
+  } }
+  fake.addDeal('poison', { dealstage: 's_early', hs_date_entered_s_early: ago(1) })
+  fake.addDeal('fine1', { dealstage: 's_early', hs_date_entered_s_early: ago(1) })
+  const runId = await newRun('full')
+  const r = await runSync({ store: badStore, client: fake.client, orgId, connectionId: connId, runId, deadline: NOW + 20_000_000, now: () => NOW + 12_000_000 })
+  assert.equal(r.status, 'partial')
+  const run = (await store.select('revenue_sync_runs', { where: { id: runId } }))[0]
+  assert.ok(run.warnings.includes('deals_skipped')); assert.equal(run.counters.deals_skipped, 1)
+  assert.equal((await store.select('crm_deals', { where: { organization_id: orgId, external_id: 'fine1' } })).length, 1)
+  assert.equal((await store.select('crm_deals', { where: { organization_id: orgId, external_id: 'poison' } })).length, 0)
+})

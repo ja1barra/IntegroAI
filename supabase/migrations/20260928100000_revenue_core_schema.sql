@@ -990,6 +990,9 @@ returns table (usage_id uuid, denied_reason text) language plpgsql security defi
 declare _s public.revenue_settings%rowtype; _used bigint; _reqs int; _id uuid;
 begin
   perform pg_advisory_xact_lock(hashtextextended('rv_ai:' || _org::text, 0));
+  -- a reservation that was never settled (function killed by the platform timeout) must not count forever
+  update public.revenue_ai_usage set status = 'error', settled_at = now()
+   where organization_id = _org and status = 'reserved' and created_at < now() - interval '10 minutes';
   select * into _s from public.revenue_settings where organization_id = _org;
   if not found then return query select null::uuid, 'not_configured'::text; return; end if;
   select coalesce(sum(case when u.status = 'reserved' then u.reserved_tokens
@@ -1060,7 +1063,9 @@ begin
   insert into public.revenue_action_executions (organization_id, proposal_id, proposal_version, idempotency_key)
   values (_org, _proposal, _p.version, _key) returning id into _exec;
   _job := public.rv_enqueue_job(_org, 'execute_action',
-            jsonb_build_object('execution_id', _exec, 'proposal_id', _proposal), 'action:' || _key, now(), 1, _approver);
+            jsonb_build_object('execution_id', _exec, 'proposal_id', _proposal), 'action:' || _key, now(), 3, _approver);
+  -- max_attempts = 3 on purpose: after a worker crash the job must be re-claimable so rv_begin_execution can
+  -- turn the orphaned 'running' execution into needs_review. A re-claimed job can never write twice (CAS).
   perform public.rv_audit(_org, 'user', _approver, 'action.approved', 'action_proposal', _proposal::text,
             jsonb_build_object('status', 'proposed', 'version', _p.version),
             jsonb_build_object('status', 'approved', 'version', _p.version, 'payload_hash', _p.payload_hash, 'execution_id', _exec),
@@ -1177,6 +1182,15 @@ begin
   get diagnostics _n = row_count;
   return _n = 1;
 end $$;
+
+-- The caller's OWN legacy flag. The legacy endpoints call this with the user's JWT + anon key, so the kill switch
+-- does not depend on a service-role key being present in the environment. It only ever reveals the caller's own state.
+create or replace function public.rv_my_legacy_outreach_allowed()
+returns boolean language sql stable security definer set search_path = '' as $$
+  select public.rv_legacy_outreach_allowed((select auth.uid()))
+$$;
+revoke all on function public.rv_my_legacy_outreach_allowed() from public, anon;
+grant execute on function public.rv_my_legacy_outreach_allowed() to authenticated, service_role;
 
 -- Lock down: nothing above is callable from the browser.
 do $$

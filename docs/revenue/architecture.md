@@ -84,3 +84,9 @@ Every route is deny-by-default (401) unless marked. Errors: `{ error: { code, me
 | `POST/GET /api/revenue/briefs`, `GET /api/revenue/briefs/:id` | member | POST enqueues (idempotent per snapshot/period/prompt/model) |
 | `POST /api/revenue/ask`, `GET /api/revenue/chat/sessions[/:id]` | member | Sessions private to the creator |
 | `GET/POST /api/revenue/actions`, `POST …/:id/{edit,approve,reject}` | member / propose / manager+ | Approve binds exact `(version, payload_hash)` |
+
+## Reliability notes
+* Time is bounded everywhere: OpenAI client 25 s × 1 retry, Ask has a 35 s overall budget, worker slices default to 40 s (function `maxDuration` 60 s). Unsettled AI reservations older than 10 minutes stop counting against the budget.
+* `execute_action` jobs have `max_attempts = 3` on purpose: a crashed worker's job must be re-claimable so the orphaned `running` execution settles as `needs_review` (a re-claim can never write twice: compare-and-swap).
+* Reconnecting the same portal revives the previous connection row (mirror history kept, no duplicate pipelines); a different portal creates a new connection and only the live one is displayed.
+* Sync data errors are isolated per record (`*_skipped` counters + warning); HubSpot values that violate DB constraints (currency, amount range) degrade to *unknown*.

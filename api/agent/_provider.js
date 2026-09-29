@@ -14,8 +14,7 @@
  */
 
 import { cfg } from '../_lib/env.js'
-import { createPostgrestStore } from '../_lib/store.js'
-import { getAuthedUser as sharedGetAuthedUser, legacyOutreachAllowed } from '../_lib/auth.js'
+import { getAuthedUser as sharedGetAuthedUser } from '../_lib/auth.js'
 
 const DEFAULT_ANTHROPIC_MODEL = 'claude-sonnet-5'
 const DEFAULT_OPENAI_BASE_URL = 'https://api.openai.com/v1'
@@ -36,10 +35,23 @@ export async function getAuthedUser(req) {
 // Server-side kill switch: tenants migrated to Revenue Manager
 // (revenue_org_flags.legacy_outreach_enabled = false) cannot use the SDR /
 // outreach / send endpoints, regardless of what the client UI shows.
-// Returns true (allowed), false (blocked) or null when the gate itself could not be evaluated. Callers must
-// answer 503 for null (fail closed) instead of crashing.
-export async function legacyOutreachEnabledFor(auth) {
-  try { return await legacyOutreachAllowed(auth.userId, createPostgrestStore(cfg())) } catch { return null }
+// It calls rv_my_legacy_outreach_allowed() with the CALLER's own JWT + anon key, so it works without a
+// service-role key and only ever reveals the caller's own flag.
+// Returns true (allowed), false (blocked) or null when the gate could not be evaluated (callers answer 503:
+// fail closed). "Function not found" means the Revenue migration has not been applied yet => allowed.
+export async function legacyOutreachEnabledFor(auth, fetchImpl = fetch) {
+  try {
+    const r = await fetchImpl(`${auth.supabaseUrl}/rest/v1/rpc/rv_my_legacy_outreach_allowed`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${auth.token}`, apikey: auth.anonKey, 'Content-Type': 'application/json' },
+      body: '{}',
+      signal: AbortSignal.timeout(8000),
+    })
+    if (r.status === 404) return true
+    if (!r.ok) return null
+    const v = await r.json()
+    return v !== false
+  } catch { return null }
 }
 
 export const LEGACY_UNAVAILABLE = { status: 503, body: { error: 'Service temporarily unavailable. Please try again.', code: 'dependency_unavailable' } }

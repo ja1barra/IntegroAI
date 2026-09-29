@@ -4,16 +4,18 @@ import assert from 'node:assert/strict'
 
 const realFetch = globalThis.fetch
 let legacyAllowed = true
+let gateStatus = 200       // 404 = migration not applied, 500 = Supabase failing
+let gateAuth = null
 let sbCalls = []
 
 before(async () => {
-  process.env.SUPABASE_URL = 'https://sb.test'; process.env.SUPABASE_ANON_KEY = 'anon'; process.env.SUPABASE_SERVICE_ROLE_KEY = 'svc'
+  process.env.SUPABASE_URL = 'https://sb.test'; process.env.SUPABASE_ANON_KEY = 'anon'   // NOTE: no service-role key on purpose
   globalThis.fetch = async (url, init = {}) => {
     const u = new URL(String(url)); sbCalls.push(u.pathname)
     if (u.origin === 'https://sb.test' && u.pathname === '/auth/v1/user') {
       return String(init.headers?.Authorization) === 'Bearer good' ? Response.json({ id: '11111111-1111-1111-1111-111111111111' }) : new Response('{}', { status: 401 })
     }
-    if (u.pathname === '/rest/v1/rpc/rv_legacy_outreach_allowed') return Response.json(legacyAllowed)
+    if (u.pathname === '/rest/v1/rpc/rv_my_legacy_outreach_allowed') { gateAuth = init.headers; return gateStatus === 200 ? Response.json(legacyAllowed) : new Response('{}', { status: gateStatus }) }
     if (u.pathname.startsWith('/rest/v1/ai_provider_settings')) return Response.json([{ provider: 'openai', api_key: 'k', model: 'm' }])
     if (u.pathname === '/v1/chat/completions') return Response.json({ choices: [{ message: { content: '{"subject":"s","body":"b"}' } }] })
     if (u.host === 'gmail.googleapis.com') return Response.json({ id: 'sent-1' })
@@ -39,11 +41,23 @@ test('generate / generate-sequence / send: 401 without session, 403 for migrated
   assert.equal((await post(gen, 'good', prospects)).code, 200)
   assert.equal((await post(send, 'good', mail)).code, 200)
 
+  assert.equal(gateAuth.Authorization, 'Bearer good'); assert.equal(gateAuth.apikey, 'anon')     // evaluated as the caller, not with a service key
+
   legacyAllowed = false                                                     // tenant migrated: legacy_outreach_enabled = false
   for (const [h, b] of [[gen, prospects], [seq, { brief: 'x', mode: 'crm', crmContext: 'y' }], [send, mail]]) {
     const r = await post(h, 'good', b)
     assert.equal(r.code, 403); assert.equal(r.body.code, 'legacy_outreach_disabled')
   }
+
+  legacyAllowed = true
+  gateStatus = 500                                                          // gate cannot be evaluated => fail CLOSED with a JSON 503
+  for (const [h, b] of [[gen, prospects], [seq, { brief: 'x', mode: 'crm', crmContext: 'y' }], [send, mail]]) {
+    const r = await post(h, 'good', b)
+    assert.equal(r.code, 503); assert.equal(r.body.code, 'dependency_unavailable')
+  }
+  gateStatus = 404                                                          // migration not applied yet => legacy keeps working
+  assert.equal((await post(gen, 'good', prospects)).code, 200)
+  gateStatus = 200
 })
 
 test('getAuthedUser keeps its historic contract', async () => {

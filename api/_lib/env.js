@@ -20,8 +20,8 @@ export function cfg(env = process.env) {
     openai: {
       apiKey: env.OPENAI_API_KEY,
       model: env.OPENAI_MODEL,
-      timeoutMs: Number(env.OPENAI_TIMEOUT_MS) || 45000,
-      maxRetries: Number.isFinite(Number(env.OPENAI_MAX_RETRIES)) && env.OPENAI_MAX_RETRIES !== undefined ? Number(env.OPENAI_MAX_RETRIES) : 2,
+      timeoutMs: Number(env.OPENAI_TIMEOUT_MS) || 25000,
+      maxRetries: Number.isFinite(Number(env.OPENAI_MAX_RETRIES)) && env.OPENAI_MAX_RETRIES !== undefined ? Number(env.OPENAI_MAX_RETRIES) : 1,
       maxOutputTokens: Number(env.OPENAI_MAX_OUTPUT_TOKENS) || 1800,
     },
     workerSecret: env.REVENUE_WORKER_SECRET || env.CRON_SECRET,

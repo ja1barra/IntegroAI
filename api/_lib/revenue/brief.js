@@ -8,8 +8,8 @@ import { filtersHash } from './evaluate.js'
 import { hubspotRecordUrl } from '../hubspot/links.js'
 import { getFlags } from '../auth.js'
 import { HttpError } from '../http.js'
-import { parseDecimal } from '../rules/decimal.js'
-import { selectAll } from '../store.js'
+import { cmpAmountDesc } from './queries.js'
+import { selectAll, IN_CHUNK } from '../store.js'
 import { isSuppressed } from '../rules/findings.js'
 
 export const BRIEF_PROMPT_VERSION = 'brief-v1'
@@ -43,7 +43,7 @@ export async function buildBriefContent({ store, orgId, snapshot, previous, peri
   const findings = await selectAll(store, 'revenue_findings', { where: { organization_id: orgId, status: 'open' }, columns: 'id,deal_id,rule_key,category,severity,evidence,recommendation,first_seen_at', order: 'id.asc' })
   const dealIds = [...new Set(findings.map(f => f.deal_id))]
   const deals = []
-  for (let i = 0; i < dealIds.length; i += 150) deals.push(...await store.select('crm_deals', { where: { organization_id: orgId, id: { in: dealIds.slice(i, i + 150) } }, columns: 'id,external_id,name,amount::text,currency,archived' }))
+  for (let i = 0; i < dealIds.length; i += IN_CHUNK) deals.push(...await store.select('crm_deals', { where: { organization_id: orgId, id: { in: dealIds.slice(i, i + IN_CHUNK) } }, columns: 'id,external_id,name,amount::text,currency,archived' }))
   const byId = new Map(deals.filter(d => !d.archived).map(d => [d.id, d]))
   // same visibility rule as Pipeline Doctor / Overview: findings a user dismissed or snoozed are not presented as open risks
   const prefs = new Map((await selectAll(store, 'revenue_finding_preferences', { where: { organization_id: orgId }, order: 'id.asc' })).map(p => [p.finding_id, p]))
@@ -51,8 +51,9 @@ export async function buildBriefContent({ store, orgId, snapshot, previous, peri
   const visible = findings.filter(f => byId.has(f.deal_id) && !isSuppressed(prefs.get(f.id), nowIso))
   const open = visible.filter(f => f.category !== 'data_quality')
   open.sort((a, b) => (SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity])
-    || ((parseDecimal(byId.get(b.deal_id).amount) ?? -1n) > (parseDecimal(byId.get(a.deal_id).amount) ?? -1n) ? 1 : -1)
-    || String(a.first_seen_at).localeCompare(String(b.first_seen_at)))
+    || cmpAmountDesc(byId.get(a.deal_id).amount, byId.get(b.deal_id).amount)
+    || String(a.first_seen_at).localeCompare(String(b.first_seen_at))
+    || String(a.id).localeCompare(String(b.id)))
   const top = open.slice(0, 5)
   const sources = [{ id: `snapshot:${snapshot.id}`, type: 'snapshot', label: 'Pipeline snapshot', as_of: snapshot.as_of }]
   const top_risks = top.map(f => {
@@ -97,7 +98,9 @@ export async function generateBrief({ store, ai, orgId, userId = null, period, r
   const key = idempotencyKey({ orgId, period, periodEnd, snapshotId: snapshot.id, rulesVersion: snapshot.rules_version, model: useAI ? ai.model : null })
 
   const [existing] = await store.select('revenue_briefs', { where: { organization_id: orgId, idempotency_key: key } })
-  if (existing && existing.status === 'ready') return { brief: existing, cached: true }
+  // A brief whose narrative failed for a transient reason is regenerated on the next request instead of being cached as final.
+  const RETRY_AI = new Set(['unavailable', 'rejected_unverified'])
+  if (existing && existing.status === 'ready' && !RETRY_AI.has(existing.content?.ai?.status)) return { brief: existing, cached: true }
 
   const content = await buildBriefContent({ store, orgId, snapshot, previous, period })
   const row = {

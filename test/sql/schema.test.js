@@ -291,3 +291,27 @@ test('rv_ensure_user_org is idempotent for brand-new users', async () => {
     assert.equal(a, b)
   })
 })
+
+test('rv_my_legacy_outreach_allowed: callable by the user themself, reveals only their own flag; anon cannot call it', async () => {
+  await asService(db, async () => { await db.query(`update public.revenue_org_flags set legacy_outreach_enabled = true where organization_id = $1`, [orgA]) })
+  await asUser(db, ua, async () => assert.equal((await db.query(`select public.rv_my_legacy_outreach_allowed() v`)).rows[0].v, true))
+  await db.query(`update public.revenue_org_flags set legacy_outreach_enabled = false where organization_id = $1`, [orgA])
+  await asUser(db, ua, async () => assert.equal((await db.query(`select public.rv_my_legacy_outreach_allowed() v`)).rows[0].v, false))
+  await asUser(db, ub, async () => assert.equal((await db.query(`select public.rv_my_legacy_outreach_allowed() v`)).rows[0].v, true))   // other tenant unaffected
+  await db.exec(`set role anon`)
+  try { await assert.rejects(db.query(`select public.rv_my_legacy_outreach_allowed()`), /permission denied/) } finally { await db.exec(`reset role`) }
+})
+
+test('AI reservations that were never settled (killed function) expire instead of counting forever', async () => {
+  await db.query(`update public.revenue_settings set ai_monthly_token_budget = 10000, ai_requests_per_hour = 100 where organization_id = $1`, [orgB])
+  await db.query(`delete from public.revenue_ai_usage where organization_id = $1`, [orgB])
+  await asService(db, async () => {
+    const r1 = (await db.query(`select * from public.rv_reserve_ai_usage($1,$2,'ask',9000,'r1',null)`, [orgB, ub])).rows[0]
+    assert.ok(r1.usage_id)
+    assert.equal((await db.query(`select * from public.rv_reserve_ai_usage($1,$2,'ask',9000,'r2',null)`, [orgB, ub])).rows[0].denied_reason, 'budget_exhausted')
+  })
+  await db.query(`update public.revenue_ai_usage set created_at = now() - interval '11 minutes' where organization_id = $1`, [orgB])
+  await asService(db, async () => {
+    assert.ok((await db.query(`select * from public.rv_reserve_ai_usage($1,$2,'ask',9000,'r3',null)`, [orgB, ub])).rows[0].usage_id)
+  })
+})

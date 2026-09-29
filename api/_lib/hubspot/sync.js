@@ -8,6 +8,7 @@
 
 import { insertChunked, selectAll } from '../store.js'
 import { HubSpotForbidden } from './client.js'
+import { HttpError } from '../http.js'
 import {
   DEAL_BASE_PROPERTIES, ACTIVITY_TYPES, stageEnteredProp, normalizePipelines, normalizeOwner, normalizeDeal,
   normalizeContact, normalizeCompany, normalizeActivity, normalizeAssociationsV4, propertyHistoryRows,
@@ -40,6 +41,19 @@ export async function runSync({ store, client, orgId, connectionId, runId, deadl
     status: 'running', started_at: startedAt, counters: { ...counters, state }, coverage, warnings, ...extra,
   })
   const upsert = (table, rows, onConflict = conflictKey, opts = {}) => insertChunked(store, table, rows.map(r => ({ ...scope, ...r })), { onConflict, ...opts })
+  // One malformed record must not fail a whole page (and then every retry): on a data error, isolate the bad rows,
+  // skip only those and report them as a warning.
+  const upsertSafe = async (table, rows, onConflict = conflictKey, label = table) => {
+    try { return await upsert(table, rows, onConflict) } catch (e) {
+      if (!(e instanceof HttpError) || e.code !== 'store_error') throw e
+      for (const r of rows) {
+        try { await upsert(table, [r], onConflict) } catch (e2) {
+          if (!(e2 instanceof HttpError) || e2.code !== 'store_error') throw e2
+          bump(`${label}_skipped`); warn(`${label}_skipped`); log('warn', 'sync.row_skipped', { table, external_id: r.external_id })
+        }
+      }
+    }
+  }
 
   await save()
   const full = run.kind === 'full'
@@ -130,7 +144,7 @@ export async function runSync({ store, client, orgId, connectionId, runId, deadl
         sorts: [{ propertyName: 'hs_lastmodifieddate', direction: 'ASCENDING' }], properties, limit: 100, ...(d.after ? { after: d.after } : {}),
       })
       const rows = (page.results ?? []).map(r => normalizeDeal(r, maps))
-      await upsert('crm_deals', rows)
+      await upsertSafe('crm_deals', rows, conflictKey, 'deals')
       bump('deals', rows.length)
       for (const r of rows) if (r.source_updated_at && (!d.max_seen || r.source_updated_at > d.max_seen)) d.max_seen = r.source_updated_at
       const next = page.paging?.next?.after ?? null
@@ -216,7 +230,7 @@ export async function runSync({ store, client, orgId, connectionId, runId, deadl
     for (let i = 0; i < missing.length; i += 100) {
       checkTime()
       const res = await client.post(`/crm/v3/objects/${objType}/batch/read`, { properties: props, inputs: missing.slice(i, i + 100).map(id => ({ id })) })
-      await upsert(table, (res?.results ?? []).map(r => ({ ...normalize(r), synced_at: new Date(now()).toISOString() })))
+      await upsertSafe(table, (res?.results ?? []).map(r => ({ ...normalize(r), synced_at: new Date(now()).toISOString() })), conflictKey, table)
     }
   }
 
@@ -263,7 +277,7 @@ export async function runSync({ store, client, orgId, connectionId, runId, deadl
           for (let i = 0; i < refetch.length; i += 100) {
             checkTime()
             const res = await client.post(`/crm/v3/objects/${objType}/batch/read`, { properties: def.properties, inputs: refetch.slice(i, i + 100).map(id => ({ id })) })
-            await upsert('crm_activities', (res?.results ?? []).map(r => normalizeActivity(objType, r)), 'organization_id,connection_id,type,external_id')
+            await upsertSafe('crm_activities', (res?.results ?? []).map(r => normalizeActivity(objType, r)), 'organization_id,connection_id,type,external_id', 'activities')
             bump(`activities_${def.type}`, res?.results?.length ?? 0)
           }
           coverage[`activities_${def.type}`] = 'complete'

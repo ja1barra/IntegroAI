@@ -76,7 +76,7 @@ All served by the single function `api/revenue.js` through `vercel.json` rewrite
 
 ## 9. Security findings fixed along the way
 
-1. `send.js` unauthenticated → now 401 without a valid session; legacy tenant gate added (test: `test/legacy.test.js`).
+1. `send.js` unauthenticated → now 401 without a valid session; a per-tenant kill switch (`rv_my_legacy_outreach_allowed()`, evaluated with the caller's own JWT, fail-closed) now protects `generate`, `generate-sequence` and `send` (test: `test/legacy.test.js`).
 2. Session verification duplicated/limited → one shared implementation that separates 401 from 503.
 
 ## 10. Open items (not done here)

@@ -12,6 +12,7 @@ export const ASK_PROMPT_VERSION = 'ask-v1'
 const MAX_TOOL_CALLS = 6
 const MAX_TURNS = 5
 const MAX_QUESTION = 1000
+const ASK_TIME_BUDGET_MS = 35_000
 
 export const ANSWER_SCHEMA = { name: 'ask_answer', schema: {
   type: 'object', additionalProperties: false, required: ['answer', 'citation_ids', 'insufficient_data'],
@@ -55,7 +56,10 @@ export async function askIntegro({ store, ai, ctx, question, sessionId = null, r
     const result = await withAIQuota({ store, orgId: ctx.orgId, userId: ctx.userId, feature: 'ask', reserveTokens: 8000, requestId, model: ai.model, run: async addUsage => {
       let input = [...history.map(m => ({ role: m.role, content: m.content })), { role: 'user', content: q }]
       let calls = 0
+      const started = Date.now()
       for (let turn = 0; turn < MAX_TURNS; turn++) {
+        // stay inside the function's time limit: the platform would otherwise kill us mid-call and strand the reservation
+        if (Date.now() - started > ASK_TIME_BUDGET_MS) throw new AIUnavailable('timeout', 'The question took too long to answer; try a narrower one')
         const resp = await ai.respond({ instructions: SYSTEM, input, tools, schema: ANSWER_SCHEMA })
         addUsage(resp.usage)
         if (resp.refusal) throw new AIUnavailable('refused', 'The model declined to answer this request')

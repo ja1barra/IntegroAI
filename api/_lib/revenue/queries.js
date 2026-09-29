@@ -4,11 +4,14 @@
 
 import { aggregate } from '../rules/aggregate.js'
 import { parseDecimal, formatDecimal } from '../rules/decimal.js'
+
+// descending by amount, unknown amounts last; returns 0 on ties so following tie-breakers actually run
+export const cmpAmountDesc = (a, b) => { const x = parseDecimal(a) ?? -1n, y = parseDecimal(b) ?? -1n; return x > y ? -1 : x < y ? 1 : 0 }
 import { filtersHash } from './evaluate.js'
 import { isSuppressed } from '../rules/findings.js'
 import { hubspotRecordUrl } from '../hubspot/links.js'
 import { badRequest, notFound } from '../http.js'
-import { selectAll } from '../store.js'
+import { selectAll, IN_CHUNK } from '../store.js'
 
 const chunk = (arr, n) => { const out = []; for (let i = 0; i < arr.length; i += n) out.push(arr.slice(i, i + n)); return out }
 const SEVERITY_RANK = { high: 0, medium: 1, low: 2, info: 3 }
@@ -40,8 +43,8 @@ export async function loadSnapshotDeals(store, orgId, snapshotId) {
     items.push(...page); if (page.length < 1000) break
   }
   const evals = new Map(), deals = new Map()
-  for (const c of chunk(items.map(i => i.evaluation_id), 150)) for (const e of await store.select('revenue_evaluations', { where: { organization_id: orgId, id: { in: c } } })) evals.set(e.id, e)
-  for (const c of chunk(items.map(i => i.deal_id), 150)) for (const d of await store.select('crm_deals', { where: { organization_id: orgId, id: { in: c } }, columns: 'id,external_id,name,amount::text,currency,close_at,stage_id,stage_external_id,pipeline_id,owner_id,owner_external_id,company_id,stage_entered_at,archived,field_states' })) deals.set(d.id, d)
+  for (const c of chunk(items.map(i => i.evaluation_id), IN_CHUNK)) for (const e of await store.select('revenue_evaluations', { where: { organization_id: orgId, id: { in: c } } })) evals.set(e.id, e)
+  for (const c of chunk(items.map(i => i.deal_id), IN_CHUNK)) for (const d of await store.select('crm_deals', { where: { organization_id: orgId, id: { in: c } }, columns: 'id,external_id,name,amount::text,currency,close_at,stage_id,stage_external_id,pipeline_id,owner_id,owner_external_id,company_id,stage_entered_at,archived,field_states' })) deals.set(d.id, d)
   // reference data of the live connection only (a disconnected portal's mirror is kept for history, not displayed)
   const [live] = await store.select('crm_connections', { where: { organization_id: orgId, status: { neq: 'disconnected' } }, columns: 'id' })
   const refScope = live ? { organization_id: orgId, connection_id: live.id } : { organization_id: orgId }
@@ -52,7 +55,7 @@ export async function loadSnapshotDeals(store, orgId, snapshotId) {
   ])
   // companies only for the deals in this snapshot (never an unbounded table read)
   const companies = []
-  for (const c of chunk([...new Set([...deals.values()].map(d => d.company_id).filter(Boolean))], 150)) companies.push(...await store.select('crm_companies', { where: { organization_id: orgId, id: { in: c } }, columns: 'id,name' }))
+  for (const c of chunk([...new Set([...deals.values()].map(d => d.company_id).filter(Boolean))], IN_CHUNK)) companies.push(...await store.select('crm_companies', { where: { organization_id: orgId, id: { in: c } }, columns: 'id,name' }))
   return { rows: items.map(i => ({ deal: deals.get(i.deal_id), evaluation: evals.get(i.evaluation_id) })).filter(r => r.deal && r.evaluation && !r.deal.archived), stages, pipelines, owners, companies }
 }
 
@@ -89,7 +92,7 @@ export async function overview({ store, orgId, filters = {}, now = new Date().to
   const dealById = new Map(rows.map(r => [r.deal.id, r.deal]))
   const visible = findings.filter(f => dealSet.has(f.deal_id) && !isSuppressed(prefs.get(f.id), now))
   const priorities = visible.filter(f => f.category !== 'data_quality')
-    .sort((a, b) => (SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity]) || ((parseDecimal(dealById.get(b.deal_id).amount) ?? -1n) > (parseDecimal(dealById.get(a.deal_id).amount) ?? -1n) ? 1 : -1))
+    .sort((a, b) => (SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity]) || cmpAmountDesc(dealById.get(a.deal_id).amount, dealById.get(b.deal_id).amount) || String(a.first_seen_at).localeCompare(String(b.first_seen_at)) || String(a.id).localeCompare(String(b.id)))
     .slice(0, 3).map(f => ({ finding_id: f.id, deal_id: f.deal_id, deal_name: dealById.get(f.deal_id).name, rule_key: f.rule_key, severity: f.severity, recommendation: f.recommendation, amount: dealById.get(f.deal_id).amount, currency: dealById.get(f.deal_id).currency }))
   return {
     ...base,
@@ -167,7 +170,7 @@ export async function listDeals({ store, orgId, filters = {}, limit = 25, offset
   let rows = ref.rows.filter(r => passes(r.deal, filters, ref))
   if (q) rows = rows.filter(r => (r.deal.name ?? '').toLowerCase().includes(String(q).toLowerCase()))
   const key = r => (r.evaluation.health === null ? 1000 : r.evaluation.health)
-  rows.sort(sort === 'amount' ? (a, b) => ((parseDecimal(b.deal.amount) ?? -1n) > (parseDecimal(a.deal.amount) ?? -1n) ? 1 : -1) : (a, b) => key(a) - key(b))
+  rows.sort(sort === 'amount' ? (a, b) => cmpAmountDesc(a.deal.amount, b.deal.amount) || String(a.deal.id).localeCompare(String(b.deal.id)) : (a, b) => (key(a) - key(b)) || cmpAmountDesc(a.deal.amount, b.deal.amount) || String(a.deal.id).localeCompare(String(b.deal.id)))
   const items = rows.slice(off, off + lim).map(r => ({
     id: r.deal.id, name: r.deal.name, company: ref.companies.find(c => c.id === r.deal.company_id)?.name ?? null, owner: ref.owners.find(o => o.id === r.deal.owner_id)?.name ?? null,
     amount: r.deal.amount, currency: r.deal.currency, stage: ref.stages.find(s => s.id === r.deal.stage_id)?.label ?? null, close_at: r.deal.close_at,

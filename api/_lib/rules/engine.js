@@ -191,7 +191,7 @@ export function evaluateDeal(input, rulesetOverride) {
     return { ...base, input_hash: hashInput(input, rs, results), eligible: false, health: null, coverage: applicableW === 0 ? null : 0, provisional: false, band: 'not_evaluable', results, data_quality: dataQualityIssues(input.deal) }
   }
   const coverage = round4(knownW / applicableW)
-  const health = clamp(100 - results.reduce((s, x) => s + x.penalty, 0), 0, 100)
+  const health = Math.round(clamp(100 - results.reduce((s, x) => s + x.penalty, 0), 0, 100)) // integer column; weights are validated as integers anyway
   const provisional = coverage < rs.min_coverage
   const band = provisional ? 'provisional'
     : health >= rs.bands.healthy_min ? 'healthy'

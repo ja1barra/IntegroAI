@@ -7,7 +7,7 @@ import { aggregate } from '../rules/aggregate.js'
 import { mergeRuleset, ENGINE_VERSION } from '../rules/defaults.js'
 import { reconcile } from '../rules/findings.js'
 import { computeStageStats } from '../rules/stagestats.js'
-import { insertChunked, selectAll } from '../store.js'
+import { insertChunked, selectAll, IN_CHUNK } from '../store.js'
 
 export const filtersHash = filters => createHash('sha256').update(canonicalJson(filters ?? {})).digest('hex')
 
@@ -93,10 +93,13 @@ export async function evaluateOrg({ store, orgId, asOf = new Date().toISOString(
     health: e.evaluation.health, coverage: e.evaluation.coverage, eligible: e.evaluation.eligible, provisional: e.evaluation.provisional, band: e.evaluation.band, results: e.evaluation.results,
   }))
   await insertChunked(store, 'revenue_evaluations', evalRows, { onConflict: 'organization_id,deal_id,input_hash,rules_version', ignoreDuplicates: true })
+  // Look up the ids by the exact (deal, input_hash) pairs we just wrote — never "every evaluation of these deals",
+  // whose history grows daily and would hit PostgREST's row cap.
   const evalId = new Map()
-  const dealIds = evalRows.map(r => r.deal_id)
-  for (let i = 0; i < dealIds.length; i += 150) {
-    for (const r of await store.select('revenue_evaluations', { where: { organization_id: orgId, rules_version: rulesVersion, deal_id: { in: dealIds.slice(i, i + 150) } }, columns: 'id,deal_id,input_hash' })) evalId.set(`${r.deal_id}|${r.input_hash}`, r.id)
+  for (let i = 0; i < evalRows.length; i += IN_CHUNK) {
+    const part = evalRows.slice(i, i + IN_CHUNK)
+    const got = await selectAll(store, 'revenue_evaluations', { where: { organization_id: orgId, rules_version: rulesVersion, input_hash: { in: part.map(r => r.input_hash) } }, columns: 'id,deal_id,input_hash', order: 'id.asc' })
+    for (const r of got) evalId.set(`${r.deal_id}|${r.input_hash}`, r.id)
   }
 
   // findings: reconcile against what we already have

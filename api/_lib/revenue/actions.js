@@ -209,6 +209,8 @@ export async function executeAction({ store, orgId, executionId, getClient, now 
     if (e instanceof HubSpotForbidden) return fail('failed', 'HubSpot denied the write (missing scope or plan); reconnect and grant write access')
     if (e instanceof HubSpotRateLimited) return fail('failed', 'HubSpot rate limit hit before the write; nothing was written, re-approve to retry')
     if (e instanceof HubSpotError && e.status >= 400 && e.status < 500) return fail('failed', `HubSpot rejected the request (${e.status})`)
+    // Nothing was sent yet (the failure hit the precondition read): the action simply did not run.
+    if (!writeStarted) return fail('failed', 'HubSpot could not be reached before writing; nothing was written. Create a new proposal to try again.')
     // network error / timeout / 5xx after a possible write: outcome unknown => reconcile, never blind retry
     await finish(store, orgId, executionId, 'needs_review', { uncertain: true, error: `outcome unknown after ${e?.name ?? 'error'}: ${sanitizeError(e, 120)}` })
     await store.rpc('rv_enqueue_job', { _org: orgId, _kind: 'reconcile', _payload: { execution_id: executionId }, _dedupe: `reconcile:${executionId}`, _run_after: new Date(now() + 10 * 60_000).toISOString(), _max_attempts: 6, _created_by: null })

@@ -40,3 +40,8 @@ union all select 'ai_provider_settings', count(*) from public.ai_provider_settin
 -- 7. flags after migrating a tenant: legacy outreach must be off
 select organization_id, revenue_mvp_enabled, managed_ai_enabled, hubspot_write_actions_enabled, legacy_outreach_enabled
   from public.revenue_org_flags order by updated_at desc limit 50;
+
+-- 8. the ONLY rv_* function callable by browser roles is the caller's own legacy flag (expect exactly 1 row: authenticated)
+select p.proname, r.rolname from pg_proc p join pg_namespace n on n.oid = p.pronamespace,
+       (select rolname from pg_roles where rolname in ('anon','authenticated')) r
+ where n.nspname = 'public' and p.proname = 'rv_my_legacy_outreach_allowed' and has_function_privilege(r.rolname, p.oid, 'execute');

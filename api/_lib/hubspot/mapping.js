@@ -72,8 +72,10 @@ export function normalizeDeal(raw, maps) {
   const state = (k, parsed) => (!has(k) ? 'unknown' : props[k] === null || props[k] === '' ? 'empty' : parsed === null ? 'unknown' : 'value')
 
   const amountRaw = has('amount') && props.amount !== null && props.amount !== '' ? String(props.amount).trim() : null
-  const amount = amountRaw !== null && /^-?\d+(\.\d+)?$/.test(amountRaw) ? amountRaw : null
-  const currencyRaw = text(props.deal_currency_code, 3)
+  // must fit numeric(20,4): a poison value must degrade to "unknown", never fail the whole page
+  const amount = amountRaw !== null && /^-?\d{1,16}(\.\d+)?$/.test(amountRaw) ? amountRaw : null
+  const currencyCandidate = text(props.deal_currency_code, 10)?.toUpperCase() ?? null
+  const currencyRaw = currencyCandidate && /^[A-Z]{3}$/.test(currencyCandidate) ? currencyCandidate : null // violates the DB check otherwise
   const stageExt = text(props.dealstage, 100), pipeExt = text(props.pipeline, 100), ownerExt = text(props.hubspot_owner_id, 50)
   const stage = stageExt ? maps.stageByExternal.get(stageExt) : undefined
   const owner = ownerExt ? maps.ownerByExternal.get(ownerExt) : undefined
@@ -89,7 +91,7 @@ export function normalizeDeal(raw, maps) {
     owner_external_id: ownerExt,
     owner_state: !has('hubspot_owner_id') ? 'unknown' : ownerExt ? 'value' : 'empty',
     amount,
-    currency: currencyRaw ? currencyRaw.toUpperCase() : (amount !== null ? maps.defaultCurrency ?? null : null),
+    currency: currencyRaw ?? (amount !== null ? maps.defaultCurrency ?? null : null),
     close_at: iso(props.closedate),
     stage_entered_at: iso(enteredProp),
     stage_entered_source: iso(enteredProp) ? 'history' : null,
@@ -100,7 +102,7 @@ export function normalizeDeal(raw, maps) {
     field_states: {
       amount: state('amount', amount),
       close_at: state('closedate', iso(props.closedate)),
-      currency: currencyRaw ? 'value' : amount !== null && maps.defaultCurrency ? 'defaulted' : has('deal_currency_code') ? 'empty' : 'unknown',
+      currency: currencyRaw ? 'value' : amount !== null && maps.defaultCurrency ? 'defaulted' : has('deal_currency_code') && !currencyCandidate ? 'empty' : 'unknown',
       owner: !has('hubspot_owner_id') ? 'unknown' : ownerExt ? 'value' : 'empty',
     },
   }
