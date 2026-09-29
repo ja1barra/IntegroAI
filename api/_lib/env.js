@@ -24,7 +24,7 @@ export function cfg(env = process.env) {
       maxRetries: Number.isFinite(Number(env.OPENAI_MAX_RETRIES)) && env.OPENAI_MAX_RETRIES !== undefined ? Number(env.OPENAI_MAX_RETRIES) : 2,
       maxOutputTokens: Number(env.OPENAI_MAX_OUTPUT_TOKENS) || 1800,
     },
-    workerSecret: env.REVENUE_WORKER_SECRET,
+    workerSecret: env.REVENUE_WORKER_SECRET || env.CRON_SECRET,
     autoSyncHours: Number.isFinite(Number(env.REVENUE_AUTO_SYNC_HOURS)) && env.REVENUE_AUTO_SYNC_HOURS !== undefined ? Number(env.REVENUE_AUTO_SYNC_HOURS) : 6,
     workerBudgetMs: Number(env.REVENUE_WORKER_BUDGET_MS) || 40000,
     encryption: {

@@ -10,6 +10,7 @@ import { getFlags } from '../auth.js'
 import { HttpError } from '../http.js'
 import { parseDecimal } from '../rules/decimal.js'
 import { selectAll } from '../store.js'
+import { isSuppressed } from '../rules/findings.js'
 
 export const BRIEF_PROMPT_VERSION = 'brief-v1'
 const SEVERITY_RANK = { high: 0, medium: 1, low: 2, info: 3 }
@@ -44,7 +45,11 @@ export async function buildBriefContent({ store, orgId, snapshot, previous, peri
   const deals = []
   for (let i = 0; i < dealIds.length; i += 150) deals.push(...await store.select('crm_deals', { where: { organization_id: orgId, id: { in: dealIds.slice(i, i + 150) } }, columns: 'id,external_id,name,amount::text,currency,archived' }))
   const byId = new Map(deals.filter(d => !d.archived).map(d => [d.id, d]))
-  const open = findings.filter(f => byId.has(f.deal_id) && f.category !== 'data_quality')
+  // same visibility rule as Pipeline Doctor / Overview: findings a user dismissed or snoozed are not presented as open risks
+  const prefs = new Map((await selectAll(store, 'revenue_finding_preferences', { where: { organization_id: orgId }, order: 'id.asc' })).map(p => [p.finding_id, p]))
+  const nowIso = new Date().toISOString()
+  const visible = findings.filter(f => byId.has(f.deal_id) && !isSuppressed(prefs.get(f.id), nowIso))
+  const open = visible.filter(f => f.category !== 'data_quality')
   open.sort((a, b) => (SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity])
     || ((parseDecimal(byId.get(b.deal_id).amount) ?? -1n) > (parseDecimal(byId.get(a.deal_id).amount) ?? -1n) ? 1 : -1)
     || String(a.first_seen_at).localeCompare(String(b.first_seen_at)))
@@ -68,7 +73,7 @@ export async function buildBriefContent({ store, orgId, snapshot, previous, peri
   return {
     period, as_of: snapshot.as_of, snapshot_status: snapshot.status,
     comparison: comparable ? { available: true, previous_snapshot_id: previous.id } : { available: false, reason: previous ? 'rules_version_changed' : 'baseline' },
-    metrics: { revenue_score: snapshot.score, eligible_deals: snapshot.eligible_count, open_deals: snapshot.total_open_count, average_coverage: snapshot.avg_coverage, by_currency: m.by_currency ?? [], exclusions: m.exclusions ?? {}, open_findings: m.findings_open ?? 0, findings_by_category: m.findings_by_category ?? {} },
+    metrics: { revenue_score: snapshot.score, eligible_deals: snapshot.eligible_count, open_deals: snapshot.total_open_count, average_coverage: snapshot.avg_coverage, by_currency: m.by_currency ?? [], exclusions: m.exclusions ?? {}, open_findings: visible.length, findings_by_category: m.findings_by_category ?? {} },
     changes, top_risks,
     actions: top_risks.filter(r => r.recommendation).map(r => ({ deal_id: r.deal_id, deal_name: r.deal_name, text: r.recommendation, evidence_id: r.evidence_id })),
     sources,

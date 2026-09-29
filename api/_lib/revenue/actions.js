@@ -73,7 +73,10 @@ export async function createProposal({ store, ctx, dealId, kind, payload, ration
   return row
 }
 
+const needVersion = v => { if (!Number.isInteger(v) || v < 1) throw badRequest('version must be a positive integer'); return v }
+
 export async function editProposal({ store, ctx, proposalId, baseVersion, payload, requestId }) {
+  needVersion(baseVersion)
   const [p] = await store.select('revenue_action_proposals', { where: { id: proposalId, organization_id: ctx.orgId } })
   if (!p) throw notFound('Proposal not found')
   const clean = validatePayload(p.kind, payload)
@@ -86,6 +89,8 @@ export async function editProposal({ store, ctx, proposalId, baseVersion, payloa
 }
 
 export async function approveProposal({ store, ctx, proposalId, version, hash, requestId }) {
+  needVersion(version)
+  if (typeof hash !== 'string' || !hash) throw badRequest('payload_hash is required')
   const flags = await getFlags(store, ctx.orgId)
   const [p] = await store.select('revenue_action_proposals', { where: { id: proposalId, organization_id: ctx.orgId }, columns: 'id,kind' })
   if (!p) throw notFound('Proposal not found')

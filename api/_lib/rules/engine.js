@@ -170,12 +170,12 @@ export function evaluateDeal(input, rulesetOverride) {
   const rs = rulesetOverride?.weights && rulesetOverride?.thresholds && rulesetOverride?.bands ? rulesetOverride : mergeRuleset(rulesetOverride)
   const asOf = toMs(input.as_of)
   if (asOf === null) throw new TypeError('evaluateDeal: input.as_of is required (ISO timestamp)')
-  const base = { deal_id: input.deal.id, as_of: new Date(asOf).toISOString(), engine_version: ENGINE_VERSION, input_hash: hashInput(input, rs) }
+  const base = { deal_id: input.deal.id, as_of: new Date(asOf).toISOString(), engine_version: ENGINE_VERSION }
 
   if (!isOpen(input.deal)) {
     const reason = input.deal.archived ? 'archived' : input.deal.is_open === null && !input.deal.stage ? 'open_state_unknown' : 'closed'
     const results = RULE_KEYS.map(k => r(k, 'not_applicable', { reason }))
-    return { ...base, eligible: false, health: null, coverage: null, provisional: false, band: 'not_applicable', results, data_quality: [] }
+    return { ...base, input_hash: hashInput(input, rs, results), eligible: false, health: null, coverage: null, provisional: false, band: 'not_applicable', results, data_quality: [] }
   }
 
   const results = RULE_KEYS.map(k => {
@@ -188,7 +188,7 @@ export function evaluateDeal(input, rulesetOverride) {
   const applicableW = applicable.reduce((s, x) => s + rs.weights[x.rule_key], 0)
   const knownW = applicable.filter(x => x.status === 'triggered' || x.status === 'clear').reduce((s, x) => s + rs.weights[x.rule_key], 0)
   if (applicableW === 0 || knownW === 0) {
-    return { ...base, eligible: false, health: null, coverage: applicableW === 0 ? null : 0, provisional: false, band: 'not_evaluable', results, data_quality: dataQualityIssues(input.deal) }
+    return { ...base, input_hash: hashInput(input, rs, results), eligible: false, health: null, coverage: applicableW === 0 ? null : 0, provisional: false, band: 'not_evaluable', results, data_quality: dataQualityIssues(input.deal) }
   }
   const coverage = round4(knownW / applicableW)
   const health = clamp(100 - results.reduce((s, x) => s + x.penalty, 0), 0, 100)
@@ -196,7 +196,7 @@ export function evaluateDeal(input, rulesetOverride) {
   const band = provisional ? 'provisional'
     : health >= rs.bands.healthy_min ? 'healthy'
     : health >= rs.bands.attention_min ? 'attention' : 'high_risk'
-  return { ...base, eligible: !provisional, health, coverage, provisional, band, results, data_quality: dataQualityIssues(input.deal) }
+  return { ...base, input_hash: hashInput(input, rs, results), eligible: !provisional, health, coverage, provisional, band, results, data_quality: dataQualityIssues(input.deal) }
 }
 
 const clamp = (n, lo, hi) => Math.min(hi, Math.max(lo, n))
@@ -209,11 +209,14 @@ export function canonicalJson(v) {
   return '{' + Object.keys(v).filter(k => v[k] !== undefined).sort().map(k => JSON.stringify(k) + ':' + canonicalJson(v[k])).join(',') + '}'
 }
 
-export function hashInput(input, rs) {
-  const tz = input.timezone ?? 'UTC'
-  const day = toMs(input.as_of) === null ? null : localDate(toMs(input.as_of), tz)
+// Hash of everything that determines the outcome: the inputs (WITHOUT the clock) plus a signature of the
+// results at day granularity (rule status, penalty, whole days). Two runs with the same inputs and the same
+// signature are the same evaluation (idempotent, storage stays small); a threshold crossed between 10:00 and
+// 16:00 changes a status and therefore the hash, so a stale row can never be reused for a different outcome.
+export function hashInput(input, rs, results = []) {
+  const signature = results.map(r => [r.rule_key, r.status, r.penalty, typeof r.observed_value === 'number' ? Math.floor(r.observed_value) : r.observed_value ?? null])
   return createHash('sha256').update(canonicalJson({
-    day, tz, deal: input.deal, activities: [...(input.activities ?? [])].sort((a, b) => String(a.id).localeCompare(String(b.id))),
-    coverage: input.coverage, stage_stats: input.stage_stats, rules: rs,
+    tz: input.timezone ?? 'UTC', deal: input.deal, activities: [...(input.activities ?? [])].sort((a, b) => String(a.id).localeCompare(String(b.id))),
+    coverage: input.coverage, stage_stats: input.stage_stats, rules: rs, signature,
   })).digest('hex')
 }

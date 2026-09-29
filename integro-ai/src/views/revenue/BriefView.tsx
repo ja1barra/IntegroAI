@@ -38,9 +38,19 @@ export default function BriefView({ active, addToast, onNavigate, onOpenDeal }: 
   const generate = async () => {
     setBusy(true)
     try {
-      await api('revenue/briefs', { method: 'POST', body: { period } })
-      for (let i = 0; i < 10; i++) { const k = await api<{ processed: number }>('revenue/worker/kick', { method: 'POST', body: {} }).catch(() => ({ processed: 0 })); if (!k.processed) break }
-      list.reload(); setSelected(null); addToast('Brief ready')
+      const q = await api<{ job_id: string }>('revenue/briefs', { method: 'POST', body: { period } })
+      let status = 'queued', lastError: string | null = null
+      for (let i = 0; i < 30 && (status === 'queued' || status === 'running'); i++) {
+        await api('revenue/worker/kick', { method: 'POST', body: {} }).catch(() => undefined)
+        const j = await api<{ job: { status: string; last_error: string | null } }>(`revenue/jobs/${q.job_id}`)
+        status = j.job.status; lastError = j.job.last_error
+        if (status === 'queued' || status === 'running') await new Promise(r => setTimeout(r, 1500))
+      }
+      if (status !== 'succeeded') { addToast(status === 'queued' || status === 'running' ? 'The brief is still being prepared — check back shortly' : `Brief failed${lastError ? `: ${lastError}` : ''}`, 'error'); return }
+      const fresh = await api<{ items: BriefRow[] }>('revenue/briefs')
+      list.setData(fresh)
+      if (fresh.items[0]) setSelected(fresh.items[0].id)
+      addToast('Brief ready')
     } catch (e) { addToast(e instanceof ApiError ? (e.code === 'no_data' ? 'Run a sync first — there is no analysis yet' : e.message) : 'Failed', 'error') } finally { setBusy(false) }
   }
 

@@ -6,14 +6,22 @@ import { suggestCategories } from '../hubspot/mapping.js'
 import { getActiveRuleset } from './evaluate.js'
 import { mergeRuleset, ENGINE_VERSION } from '../rules/defaults.js'
 import { enqueue } from '../jobs.js'
+import { selectAll } from '../store.js'
 
 const CATEGORIES = ['early', 'mid', 'late']
+
+// The mirror of a previously disconnected portal is kept for history; every read here is scoped to the LIVE connection.
+async function liveScope(store, orgId) {
+  const [conn] = await store.select('crm_connections', { where: { organization_id: orgId, status: { neq: 'disconnected' } }, columns: 'id' })
+  return conn ? { organization_id: orgId, connection_id: conn.id } : null
+}
 
 export async function getOnboarding({ store, orgId }) {
   const [settings] = await store.select('revenue_settings', { where: { organization_id: orgId } })
   const [org] = await store.select('organizations', { where: { id: orgId } })
-  const pipelines = await store.select('crm_pipelines', { where: { organization_id: orgId }, columns: 'id,external_id,label,display_order', order: 'display_order.asc' })
-  const stages = await store.select('crm_stages', { where: { organization_id: orgId }, columns: 'id,external_id,pipeline_id,label,display_order,is_closed,category,category_source', order: 'display_order.asc' })
+  const scope = await liveScope(store, orgId)
+  const pipelines = scope ? await selectAll(store, 'crm_pipelines', { where: scope, columns: 'id,external_id,label,display_order', order: 'display_order.asc,id.asc' }) : []
+  const stages = scope ? await selectAll(store, 'crm_stages', { where: scope, columns: 'id,external_id,pipeline_id,label,display_order,is_closed,category,category_source', order: 'display_order.asc,id.asc' }) : []
   return {
     state: settings?.onboarding_state ?? 'not_started',
     settings: { selected_pipeline_ids: settings?.selected_pipeline_ids ?? [], timezone: settings?.timezone ?? org?.timezone ?? 'UTC', currency: settings?.currency ?? null, brief_cadence: settings?.brief_cadence ?? 'weekly' },
@@ -31,7 +39,8 @@ export async function saveOnboarding({ store, ctx, body, requestId }) {
   requireCan(ctx, 'manage_rules')
   const orgId = ctx.orgId
   const patch = {}
-  const pipelines = await store.select('crm_pipelines', { where: { organization_id: orgId }, columns: 'id,external_id' })
+  const scope = (await liveScope(store, orgId)) ?? { organization_id: orgId, connection_id: '00000000-0000-0000-0000-000000000000' }
+  const pipelines = await selectAll(store, 'crm_pipelines', { where: scope, columns: 'id,external_id', order: 'id.asc' })
   if (body.selected_pipeline_ids !== undefined) {
     if (!Array.isArray(body.selected_pipeline_ids) || body.selected_pipeline_ids.length > 10) throw badRequest('selected_pipeline_ids must be a short list')
     const known = new Set(pipelines.map(p => p.external_id))
@@ -42,20 +51,25 @@ export async function saveOnboarding({ store, ctx, body, requestId }) {
   if (body.currency !== undefined) { if (!/^[A-Z]{3}$/.test(String(body.currency))) throw badRequest('currency must be an ISO 4217 code'); patch.currency = String(body.currency) }
   if (body.brief_cadence !== undefined) { if (!['daily', 'weekly'].includes(body.brief_cadence)) throw badRequest('brief_cadence must be daily or weekly'); patch.brief_cadence = body.brief_cadence }
   if (body.stage_categories !== undefined) {
-    const stages = await store.select('crm_stages', { where: { organization_id: orgId }, columns: 'external_id,is_closed' })
+    const stages = await selectAll(store, 'crm_stages', { where: scope, columns: 'external_id,is_closed', order: 'id.asc' })
     const open = new Map(stages.filter(s => s.is_closed !== true).map(s => [s.external_id, s]))
     for (const [ext, cat] of Object.entries(body.stage_categories ?? {})) {
       if (!open.has(ext)) throw badRequest(`Stage ${ext.slice(0, 40)} is unknown or closed (closed stages come from HubSpot metadata)`)
       if (!CATEGORIES.includes(cat)) throw badRequest('category must be early, mid or late')
     }
-    for (const [ext, cat] of Object.entries(body.stage_categories ?? {})) await store.update('crm_stages', { organization_id: orgId, external_id: ext }, { category: cat, category_source: 'admin' })
+    for (const [ext, cat] of Object.entries(body.stage_categories ?? {})) await store.update('crm_stages', { ...scope, external_id: ext }, { category: cat, category_source: 'admin' })
   }
   // state machine
   const [cur] = await store.select('revenue_settings', { where: { organization_id: orgId } })
+  // A different set of analyzed pipelines invalidates the incremental watermark: without this, an incremental sync
+  // would only fetch newly modified deals of the added pipeline and leave its older, untouched deals unmirrored.
+  if (patch.selected_pipeline_ids && [...patch.selected_pipeline_ids].sort().join('|') !== [...(cur?.selected_pipeline_ids ?? [])].sort().join('|')) {
+    await store.delete('revenue_sync_cursors', { organization_id: orgId, object_type: 'deals' })
+  }
   const merged = { ...cur, ...patch }
   let state = cur?.onboarding_state ?? 'not_started'
   if (state !== 'not_started') {
-    const stagesNow = await store.select('crm_stages', { where: { organization_id: orgId }, columns: 'pipeline_id,is_closed,category' })
+    const stagesNow = await selectAll(store, 'crm_stages', { where: scope, columns: 'pipeline_id,is_closed,category', order: 'id.asc' })
     const selPipes = new Set(pipelines.filter(p => (merged.selected_pipeline_ids ?? []).includes(p.external_id)).map(p => p.id))
     const openStages = stagesNow.filter(s => selPipes.has(s.pipeline_id) && s.is_closed !== true)
     if (selPipes.size) state = 'pipeline_selected'

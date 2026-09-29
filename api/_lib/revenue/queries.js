@@ -42,10 +42,13 @@ export async function loadSnapshotDeals(store, orgId, snapshotId) {
   const evals = new Map(), deals = new Map()
   for (const c of chunk(items.map(i => i.evaluation_id), 150)) for (const e of await store.select('revenue_evaluations', { where: { organization_id: orgId, id: { in: c } } })) evals.set(e.id, e)
   for (const c of chunk(items.map(i => i.deal_id), 150)) for (const d of await store.select('crm_deals', { where: { organization_id: orgId, id: { in: c } }, columns: 'id,external_id,name,amount::text,currency,close_at,stage_id,stage_external_id,pipeline_id,owner_id,owner_external_id,company_id,stage_entered_at,archived,field_states' })) deals.set(d.id, d)
+  // reference data of the live connection only (a disconnected portal's mirror is kept for history, not displayed)
+  const [live] = await store.select('crm_connections', { where: { organization_id: orgId, status: { neq: 'disconnected' } }, columns: 'id' })
+  const refScope = live ? { organization_id: orgId, connection_id: live.id } : { organization_id: orgId }
   const [stages, pipelines, owners] = await Promise.all([
-    selectAll(store, 'crm_stages', { where: { organization_id: orgId }, columns: 'id,external_id,label,category,is_closed,display_order', order: 'id.asc' }),
-    selectAll(store, 'crm_pipelines', { where: { organization_id: orgId }, columns: 'id,external_id,label', order: 'id.asc' }),
-    selectAll(store, 'crm_owners', { where: { organization_id: orgId }, columns: 'id,external_id,name,archived', order: 'id.asc' }),
+    selectAll(store, 'crm_stages', { where: refScope, columns: 'id,external_id,label,category,is_closed,display_order', order: 'id.asc' }),
+    selectAll(store, 'crm_pipelines', { where: refScope, columns: 'id,external_id,label', order: 'id.asc' }),
+    selectAll(store, 'crm_owners', { where: refScope, columns: 'id,external_id,name,archived', order: 'id.asc' }),
   ])
   // companies only for the deals in this snapshot (never an unbounded table read)
   const companies = []

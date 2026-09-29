@@ -23,10 +23,11 @@ export function createHubSpotClient({ apiBase = 'https://api.hubapi.com', getTok
     const url = new URL(apiBase + path)
     for (const [k, v] of Object.entries(query ?? {})) if (v !== undefined && v !== null) url.searchParams.set(k, String(v))
     const isSearch = path.endsWith('/search')
-    let forcedRefresh = false
+    let forceNext = false, refreshedOn401 = false
     for (let attempt = 0; ; attempt++) {
       if (isSearch) { const wait = lastSearchAt + searchGapMs - Date.now(); if (wait > 0) await sleep(wait); lastSearchAt = Date.now() }
-      const token = await getToken({ force: forcedRefresh })
+      const token = await getToken({ force: forceNext })
+      forceNext = false // only the attempt right after a 401 forces a refresh; later retries reuse whatever is current
       let res
       try {
         res = await fetchImpl(url, { method, headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body), signal: AbortSignal.timeout(25000) })
@@ -36,7 +37,7 @@ export function createHubSpotClient({ apiBase = 'https://api.hubapi.com', getTok
       }
       if (res.ok) return res.status === 204 ? null : await res.json().catch(() => null)
       const err = await res.json().catch(() => ({}))
-      if (res.status === 401 && !forcedRefresh) { forcedRefresh = true; continue }
+      if (res.status === 401 && !refreshedOn401) { refreshedOn401 = true; forceNext = true; continue }
       if (res.status === 401) throw new ReconnectRequired('HubSpot rejected the access token')
       if (res.status === 403) throw new HubSpotForbidden(path, err?.category)
       if (res.status === 429) {

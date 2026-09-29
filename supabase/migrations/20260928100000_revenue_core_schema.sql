@@ -800,8 +800,19 @@ begin
     update public.crm_connections set status = 'active', granted_scopes = _scopes, capabilities = _capabilities,
            last_error = null, connected_by = _user where id = _conn;
   else
-    insert into public.crm_connections (organization_id, provider, portal_id, status, granted_scopes, capabilities, connected_by)
-    values (_org, 'hubspot', _portal, 'active', _scopes, _capabilities, _user) returning id into _conn;
+    -- Reconnecting the same portal after a disconnect revives the previous connection row, so the mirror
+    -- (unique per org+connection+external_id) keeps its history instead of duplicating every pipeline/stage.
+    select * into _existing from public.crm_connections c
+     where c.organization_id = _org and c.provider = 'hubspot' and c.portal_id = _portal and c.status = 'disconnected'
+     order by c.disconnected_at desc nulls last limit 1 for update;
+    if found then
+      _conn := _existing.id;
+      update public.crm_connections set status = 'active', granted_scopes = _scopes, capabilities = _capabilities,
+             last_error = null, connected_by = _user, disconnected_at = null where id = _conn;
+    else
+      insert into public.crm_connections (organization_id, provider, portal_id, status, granted_scopes, capabilities, connected_by)
+      values (_org, 'hubspot', _portal, 'active', _scopes, _capabilities, _user) returning id into _conn;
+    end if;
   end if;
   insert into private.crm_credentials (connection_id, organization_id, access_token_enc, refresh_token_enc, expires_at, key_version)
   values (_conn, _org, _access_enc, _refresh_enc, _expires_at, _key_version)
@@ -901,7 +912,7 @@ begin
 end $$;
 
 create or replace function public.rv_claim_job(_worker text, _lease_seconds int, _kinds text[], _org uuid default null)
-returns table (id uuid, organization_id uuid, kind text, payload jsonb, attempts int, max_attempts int, reclaimed boolean)
+returns table (id uuid, organization_id uuid, kind text, payload jsonb, attempts int, max_attempts int, reclaimed boolean, created_by uuid)
 language plpgsql security definer set search_path = '' as $$
 declare _job private.revenue_jobs%rowtype;
 begin
@@ -921,7 +932,7 @@ begin
          lease_until = now() + make_interval(secs => _lease_seconds), attempts = j.attempts + 1, updated_at = now()
    where j.id = _job.id;
   return query select _job.id, _job.organization_id, _job.kind, _job.payload, _job.attempts + 1, _job.max_attempts,
-                      (_job.status = 'running');
+                      (_job.status = 'running'), _job.created_by;
 end $$;
 
 create or replace function public.rv_heartbeat_job(_id uuid, _worker text, _lease_seconds int, _progress jsonb)
@@ -1035,7 +1046,7 @@ begin
      where e.organization_id = _org and e.proposal_id = _proposal and e.proposal_version = _p.approved_version limit 1;
     return query select ('already_' || _p.status)::text, _exec, null::uuid; return;
   end if;
-  if _p.version <> _version or _p.payload_hash <> _hash then
+  if _p.version is distinct from _version or _p.payload_hash is distinct from _hash then
     return query select 'stale_version'::text, null::uuid, null::uuid; return;
   end if;
   if _p.expires_at <= now() then
@@ -1112,7 +1123,7 @@ begin
   end if;
   select * into _p from public.revenue_action_proposals where id = _proposal and organization_id = _org for update;
   if not found then return query select 'not_found'::text, null::int; return; end if;
-  if _p.version <> _base_version then return query select 'stale_version'::text, null::int; return; end if;
+  if _p.version is distinct from _base_version then return query select 'stale_version'::text, null::int; return; end if;
   if _p.status not in ('proposed','approved') then return query select ('not_editable_' || _p.status)::text, null::int; return; end if;
   if _p.status = 'approved' then
     update public.revenue_action_executions set status = 'failed', error = 'approval superseded by an edit', finished_at = now()

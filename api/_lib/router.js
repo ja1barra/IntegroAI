@@ -48,7 +48,10 @@ export function createHandler(overrides = {}) {
     res.status(302).end()
     return null
   })
-  route('POST', 'revenue/worker/tick', { auth: 'worker' }, async ({ rid }) => ({ status: 200, body: await runWorkerTick({ store, config, ai, fetchImpl, log: (l, e, f) => log(l, e, { ...f, request_id: rid }), now }) }))
+  // GET as well as POST: Vercel Cron only issues GET requests.
+  for (const method of ['GET', 'POST']) {
+    route(method, 'revenue/worker/tick', { auth: 'worker' }, async ({ rid }) => ({ status: 200, body: await runWorkerTick({ store, config, ai, fetchImpl, log: (l, e, f) => log(l, e, { ...f, request_id: rid }), now }) }))
+  }
 
   // ── context ───────────────────────────────────────────────────────────────
   route('GET', 'revenue/context', { auth: 'user' }, async ({ ctx }) => {

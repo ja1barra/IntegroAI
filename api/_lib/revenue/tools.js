@@ -6,6 +6,7 @@ import { hubspotRecordUrl } from '../hubspot/links.js'
 import { createProposal } from './actions.js'
 import { can } from '../auth.js'
 import { filtersHash } from './evaluate.js'
+import { isSuppressed } from '../rules/findings.js'
 
 const MAX_LIMIT = 20
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -53,7 +54,11 @@ export function createToolRunner({ store, ctx, requestId }) {
     async list_risk_findings({ category, severity, limit = 10, offset = 0 }) {
       const lim = Math.min(Math.max(Number(limit) || 10, 1), MAX_LIMIT)
       const where = { organization_id: orgId, status: 'open', ...(category ? { category } : {}), ...(severity ? { severity } : {}) }
-      const rows = await store.select('revenue_findings', { where, columns: 'id,deal_id,rule_key,category,severity,evidence,recommendation,first_seen_at,last_seen_at', order: 'last_seen_at.desc', limit: lim, offset: Math.max(Number(offset) || 0, 0) })
+      const page = await store.select('revenue_findings', { where, columns: 'id,deal_id,rule_key,category,severity,evidence,recommendation,first_seen_at,last_seen_at', order: 'last_seen_at.desc,id.asc', limit: lim, offset: Math.max(Number(offset) || 0, 0) })
+      // same visibility rule as the UI: findings a user dismissed/snoozed are not presented as open risks
+      const prefs = new Map(page.length ? (await store.select('revenue_finding_preferences', { where: { organization_id: orgId, finding_id: { in: page.map(r => r.id) } } })).map(p => [p.finding_id, p]) : [])
+      const nowIso = new Date().toISOString()
+      const rows = page.filter(r => !isSuppressed(prefs.get(r.id), nowIso))
       const deals = rows.length ? await store.select('crm_deals', { where: { organization_id: orgId, id: { in: [...new Set(rows.map(r => r.deal_id))] } }, columns: 'id,external_id,name,amount::text,currency,archived' }) : []
       const byId = new Map(deals.map(d => [d.id, d])); const portalId = await portal()
       const items = rows.filter(r => byId.has(r.deal_id) && !byId.get(r.deal_id).archived).map(r => {
@@ -62,14 +67,16 @@ export function createToolRunner({ store, ctx, requestId }) {
         const fid = ref({ id: `finding:${r.id}`, type: 'finding', label: `${r.rule_key} — ${d.name ?? d.external_id}`, deal_id: d.id, as_of: r.last_seen_at })
         return { evidence_id: fid, deal_evidence_id: `deal:${d.id}`, deal_id: d.id, deal_name: d.name, amount: d.amount, currency: d.currency, rule: r.rule_key, category: r.category, severity: r.severity, evidence: r.evidence, recommendation: r.recommendation, first_seen_at: r.first_seen_at }
       })
-      return done({ items, next_offset: rows.length === lim ? (Number(offset) || 0) + lim : null })
+      return done({ items, hidden_by_user: page.length - rows.length, next_offset: page.length === lim ? (Number(offset) || 0) + lim : null })
     },
     async get_deal({ deal_id }) {
       if (!UUID.test(String(deal_id))) return done({ error: 'not_found' })
       const [d] = await store.select('crm_deals', { where: { id: deal_id, organization_id: orgId }, columns: 'id,external_id,name,amount::text,currency,close_at,stage_external_id,owner_state,stage_entered_at,archived' })
       if (!d) return done({ error: 'not_found' })
       const [ev] = await store.select('revenue_evaluations', { where: { organization_id: orgId, deal_id }, order: 'created_at.desc', limit: 1 })
-      const fs = await store.select('revenue_findings', { where: { organization_id: orgId, deal_id, status: 'open' }, columns: 'id,rule_key,severity,evidence,recommendation' })
+      const allFs = await store.select('revenue_findings', { where: { organization_id: orgId, deal_id, status: 'open' }, columns: 'id,rule_key,severity,evidence,recommendation' })
+      const fprefs = new Map(allFs.length ? (await store.select('revenue_finding_preferences', { where: { organization_id: orgId, finding_id: { in: allFs.map(f => f.id) } } })).map(p => [p.finding_id, p]) : [])
+      const fs = allFs.filter(f => !isSuppressed(fprefs.get(f.id), new Date().toISOString()))
       const asOf = ev?.as_of ?? null
       const id = ref(dealRef(d, await portal(), asOf))
       for (const f of fs) ref({ id: `finding:${f.id}`, type: 'finding', label: `${f.rule_key} — ${d.name ?? d.external_id}`, deal_id: d.id, as_of: asOf })

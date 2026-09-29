@@ -245,3 +245,15 @@ test('stage stats: only completed intervals inside the window; open ages never u
   const s = computeStageStats(h, { asOf: AS_OF, windowDays: 180 }).get('a')
   assert.equal(s.sample_size, 4); assert.equal(s.median_days, 5)
 })
+
+test('review regression: a threshold crossed later the same day yields a different evaluation hash (no stale row reuse)', () => {
+  const lastTouch = '2026-09-14T15:00:00Z'                                    // exactly 14 days before 2026-09-28T15:00
+  const at = asOf => evaluateDeal({ ...healthy({ activities: [{ id: 'a', type: 'call', occurred_at: lastTouch, status: 'completed' }] }), as_of: asOf })
+  const morning = at('2026-09-28T10:00:00Z'), afternoon = at('2026-09-28T16:00:00Z')
+  assert.equal(rule(morning, 'inactivity').status, 'clear')
+  assert.equal(rule(afternoon, 'inactivity').status, 'triggered')
+  assert.notEqual(morning.input_hash, afternoon.input_hash)
+  // ...while two runs with identical inputs and identical outcomes (same whole day count) do dedupe
+  const a = at('2026-09-27T16:00:00Z'), b = at('2026-09-27T17:30:00Z')
+  assert.equal(a.input_hash, b.input_hash)
+})

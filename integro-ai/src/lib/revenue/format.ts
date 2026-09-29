@@ -31,3 +31,13 @@ export function relativeDays(iso: string | null | undefined): string {
   const days = Math.floor((Date.now() - new Date(iso).getTime()) / 86400000)
   return days <= 0 ? 'today' : days === 1 ? '1 day ago' : `${days} days ago`
 }
+
+// HubSpot date pickers store 00:00:00Z. Rendering that instant in a western time zone would show the previous
+// calendar day (and disagree with the overdue_close rule), so such values are shown as the date they encode.
+export function formatCloseDate(iso: string | null | undefined, tz?: string | null): string {
+  if (!iso) return '—'
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return '—'
+  const utcMidnight = d.getUTCHours() === 0 && d.getUTCMinutes() === 0 && d.getUTCSeconds() === 0 && d.getUTCMilliseconds() === 0
+  return formatDate(iso, utcMidnight ? 'UTC' : tz)
+}

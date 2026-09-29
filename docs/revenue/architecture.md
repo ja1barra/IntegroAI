@@ -42,7 +42,7 @@ deploy**: that the `vercel.json` rewrites (incl. the regex param `:action(connec
 See `supabase/migrations/20260928100000_revenue_core_schema.sql` (every table, constraint and policy is there). Highlights:
 * `organizations` + `organization_members` (new; backfilled one org per legacy user — never by e-mail/domain/org-name text).
 * Composite FKs `(organization_id, id)` everywhere ⇒ a deal cannot point at another org's pipeline/stage/owner (tested).
-* `revenue_evaluations` are immutable facts keyed `(org, deal, input_hash, rules_version)`; `revenue_snapshot_items` link them to a snapshot (deviation from the proposal: evaluation rows are shared across snapshots when inputs are identical).
+* `revenue_evaluations` are immutable facts keyed `(org, deal, input_hash, rules_version)` where `input_hash` covers the inputs (no clock) **plus a day-granularity signature of the results**, so a threshold crossed later the same day can never reuse a stale row; `revenue_snapshot_items` link them to a snapshot (deviation from the proposal: evaluation rows are shared across snapshots when inputs are identical).
 * Money = `numeric(20,4)`, summed as exact decimals (BigInt) per currency; timestamps `timestamptz`.
 * Browser roles: `SELECT` only via RLS on active membership. Sensitive writes only through server-side `SECURITY DEFINER` RPCs (`EXECUTE` for `service_role` only, `search_path=''`).
 * `private.crm_credentials`: AES-256-GCM (app-level key, key id in the ciphertext, rotation supported).
@@ -71,10 +71,11 @@ Every route is deny-by-default (401) unless marked. Errors: `{ error: { code, me
 | `POST /api/integrations/hubspot` | legacy | Unchanged private-token relay for un-migrated tenants |
 | `GET /api/revenue/context` | member | org, role, flags, `ai_configured` |
 | `GET/POST /api/revenue/onboarding` | view / admin | pipelines+stages (+suggestions), selection, stage categories, tz, currency, confirm |
+| `GET /api/revenue/rules` | member | Active rule-set version + thresholds (the settings form is prefilled from it) |
 | `POST /api/revenue/rules` | admin | New immutable rule-set version + re-evaluation |
 | `POST /api/revenue/sync` | manager+ | 202 `{job_id, sync_run_id}`; dedupes an active run |
 | `GET /api/revenue/jobs/:id[?run=]` | member | Tenant-scoped job + sync-run progress |
-| `POST /api/revenue/worker/tick` | scheduler secret | Processes jobs for all orgs (time-boxed) |
+| `GET|POST /api/revenue/worker/tick` | scheduler secret | (GET for Vercel Cron) Processes jobs for all orgs (time-boxed) |
 | `POST /api/revenue/worker/kick` | member | Time-boxed worker slice for the caller's org only (works without an external scheduler) |
 | `GET /api/revenue/overview` | member | KPIs from the latest snapshot; filters recompute from snapshot items |
 | `GET /api/revenue/findings` | member | Paginated, grouped (unique deals / unique amount per currency) |

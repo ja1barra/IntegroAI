@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useApi } from '../../lib/revenue/useApi'
 import { useRevenue, canRole } from '../../lib/revenue/RevenueContext'
 import { t } from '../../lib/revenue/i18n'
-import { formatMoney, formatDate, pct } from '../../lib/revenue/format'
+import { formatMoney, formatDate, formatCloseDate, pct } from '../../lib/revenue/format'
 import type { DealsResponse, DealDetail } from '../../lib/revenue/types'
 import { StateBox, Loading, ErrorBox, HealthBadge, SeverityBadge, ProposeTaskModal, Chip } from '../../components/revenue/common'
 import type { RevenueViewProps } from './OverviewView'
@@ -28,7 +28,7 @@ export default function DealsView({ active, addToast, onNavigate, selectedDealId
             <tr key={d.id}>
               <td><button className="rv-link" onClick={() => onSelectDeal(d.id)}>{d.name ?? d.id}</button></td>
               <td>{d.company ?? '—'}</td><td>{d.owner ?? <Chip>no owner</Chip>}</td><td>{formatMoney(d.amount, d.currency)}</td><td>{d.stage ?? '—'}</td>
-              <td>{formatDate(d.close_at)}</td><td>{d.days_since_activity === null ? t('common.unknown') : `${Math.floor(d.days_since_activity)} d`}</td>
+              <td>{formatCloseDate(d.close_at)}</td><td>{d.days_since_activity === null ? t('common.unknown') : `${Math.floor(d.days_since_activity)} d`}</td>
               <td><HealthBadge band={d.band} health={d.health} /></td><td>{pct(d.coverage)}</td>
             </tr>
           ))}
@@ -80,7 +80,7 @@ function DealDrawer({ id, onClose, addToast, onNavigate }: { id: string; onClose
             <div className="rv-facts">
               <div><span>Amount</span>{formatMoney(d.amount, d.currency)}</div><div><span>Stage</span>{d.stage ?? '—'}{d.stage_category ? ` (${d.stage_category})` : ''}</div>
               <div><span>Owner</span>{d.owner ?? 'No owner'}</div><div><span>Company</span>{d.company ?? '—'}</div>
-              <div><span>Close date</span>{formatDate(d.close_at)}</div><div><span>In stage since</span>{d.stage_entered_at ? `${formatDate(d.stage_entered_at)} (${d.stage_entered_source})` : t('common.unknown')}</div>
+              <div><span>Close date</span>{formatCloseDate(d.close_at)}</div><div><span>In stage since</span>{d.stage_entered_at ? `${formatDate(d.stage_entered_at)} (${d.stage_entered_source})` : t('common.unknown')}</div>
             </div>
             <div className="rv-row">
               {data.evaluation && <HealthBadge band={data.evaluation.band} health={data.evaluation.health} />}

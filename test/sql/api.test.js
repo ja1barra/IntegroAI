@@ -341,3 +341,11 @@ test('responses never leak secrets; errors carry a request id and no stack', asy
   const r = await call('GET', 'revenue/deals/not-a-uuid', { token: 't-view' })
   assert.equal(r.statusCode, 400); assert.ok(r.body.error.request_id); assert.equal(JSON.stringify(r.body).includes('at '), false)
 })
+
+test('worker tick also answers GET (Vercel Cron) and accepts CRON_SECRET as the credential', async () => {
+  assert.equal((await call('GET', 'revenue/worker/tick', { token: 'w-secret' })).statusCode, 200)
+  assert.equal((await call('GET', 'revenue/worker/tick', { token: 'nope' })).statusCode, 401)
+  const { cfg } = await import('../../api/_lib/env.js')
+  assert.equal(cfg({ CRON_SECRET: 'cron-s' }).workerSecret, 'cron-s')
+  assert.equal(cfg({ CRON_SECRET: 'cron-s', REVENUE_WORKER_SECRET: 'w' }).workerSecret, 'w')
+})

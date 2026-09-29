@@ -135,3 +135,76 @@ test('legacy gate: fail-closed semantics', async () => {
   await assert.rejects(legacyOutreachAllowed('u', { configured: false }, { strict: true }), e => e.status === 503)
   assert.equal(await legacyOutreachAllowed('u', { configured: true, rpc: async () => false }), false)
 })
+
+test('review round 2: changing the analyzed pipelines resets the deals watermark', async () => {
+  const ctx = { orgId: A.orgId, userId: A.user, role: 'admin' }
+  await store.insert('revenue_sync_cursors', [{ organization_id: A.orgId, connection_id: (await store.select('crm_connections', { where: { organization_id: A.orgId, status: { neq: 'disconnected' } } }))[0].id, object_type: 'deals', high_watermark: asOf, status: 'idle' }], { onConflict: 'organization_id,connection_id,object_type' })
+  const { saveOnboarding } = await import('../../api/_lib/revenue/onboarding.js')
+  await store.update('crm_pipelines', { organization_id: A.orgId }, { archived: false })
+  await saveOnboarding({ store, ctx, body: { selected_pipeline_ids: ['p1'] } })                           // unchanged selection: watermark stays
+  assert.equal((await store.select('revenue_sync_cursors', { where: { organization_id: A.orgId, object_type: 'deals' } })).length, 1)
+  await store.update('revenue_settings', { organization_id: A.orgId }, { selected_pipeline_ids: [] })
+  await saveOnboarding({ store, ctx, body: { selected_pipeline_ids: ['p1'] } })                           // selection changed: next sync is a full read
+  assert.equal((await store.select('revenue_sync_cursors', { where: { organization_id: A.orgId, object_type: 'deals' } })).length, 0)
+})
+
+test('review round 2: reconnecting the same portal revives the connection (no duplicated pipelines/stages)', async () => {
+  const [conn] = await store.select('crm_connections', { where: { organization_id: A.orgId, status: { neq: 'disconnected' } } })
+  await store.rpc('rv_disconnect_connection', { _org: A.orgId, _conn: conn.id, _actor: A.user, _request_id: 'r' })
+  const id2 = await store.rpc('rv_activate_hubspot_connection', { _org: A.orgId, _user: A.user, _portal: conn.portal_id, _scopes: ['crm.objects.deals.read'], _capabilities: { write_tasks: true, write_deals: true }, _access_enc: 'a', _refresh_enc: 'r', _expires_at: new Date(Date.now() + 1800_000).toISOString(), _key_version: '1', _target: null })
+  assert.equal(id2, conn.id)                                                                              // same row, same mirror
+  const { getOnboarding } = await import('../../api/_lib/revenue/onboarding.js')
+  const ob = await getOnboarding({ store, orgId: A.orgId })
+  assert.equal(ob.pipelines.length, 1)
+  // a DIFFERENT portal creates a new connection, and only the live one is displayed
+  await store.rpc('rv_disconnect_connection', { _org: A.orgId, _conn: conn.id, _actor: A.user, _request_id: 'r' })
+  const id3 = await store.rpc('rv_activate_hubspot_connection', { _org: A.orgId, _user: A.user, _portal: '777', _scopes: [], _capabilities: {}, _access_enc: 'a', _refresh_enc: 'r', _expires_at: new Date(Date.now() + 1800_000).toISOString(), _key_version: '1', _target: null })
+  assert.notEqual(id3, conn.id)
+  assert.equal((await getOnboarding({ store, orgId: A.orgId })).pipelines.length, 0)
+  // restore the original for later tests
+  await store.rpc('rv_disconnect_connection', { _org: A.orgId, _conn: id3, _actor: A.user, _request_id: 'r' })
+  await store.rpc('rv_activate_hubspot_connection', { _org: A.orgId, _user: A.user, _portal: conn.portal_id, _scopes: [], _capabilities: { write_tasks: true, write_deals: true }, _access_enc: 'a', _refresh_enc: 'r', _expires_at: new Date(Date.now() + 1800_000).toISOString(), _key_version: '1', _target: null })
+})
+
+test('review round 2: dismissed findings are excluded from the brief and from Ask tools, consistently with the UI', async () => {
+  const { generateBrief } = await import('../../api/_lib/revenue/brief.js')
+  const { createToolRunner } = await import('../../api/_lib/revenue/tools.js')
+  await evaluateOrg({ store, orgId: A.orgId, asOf: new Date(NOW + 300_000).toISOString() })
+  const ctx = { orgId: A.orgId, userId: A.user, role: 'admin' }
+  const open = await store.select('revenue_findings', { where: { organization_id: A.orgId, status: 'open' } })
+  const target = open.find(f => f.category !== 'data_quality')
+  await store.delete('revenue_finding_preferences', { organization_id: A.orgId, finding_id: target.id }).catch(() => {})
+  await setFindingPreference({ store, ctx, findingId: target.id, state: 'dismissed', reason: 'accepted risk' })
+  await store.update('revenue_org_flags', { organization_id: A.orgId }, { revenue_mvp_enabled: true })
+  const { brief } = await generateBrief({ store, ai: { available: false }, orgId: A.orgId, period: 'weekly', requestId: 'x' })
+  assert.ok(!brief.content.top_risks.some(r => r.evidence_id === `finding:${target.id}`))
+  const runner = createToolRunner({ store, ctx, requestId: 'x' })
+  const out = await runner.run('list_risk_findings', JSON.stringify({ category: null, severity: null, limit: 20, offset: 0 }))
+  assert.ok(!out.items.some(i => i.evidence_id === `finding:${target.id}`)); assert.ok(out.hidden_by_user >= 1)
+  const { overview } = await import('../../api/_lib/revenue/queries.js')
+  const ov = await overview({ store, orgId: A.orgId })
+  assert.equal(brief.content.metrics.open_findings, ov.kpis.findings_open)                            // same number everywhere
+})
+
+test('review round 2: brief jobs carry the requesting user (usage attribution) and versions must be integers', async () => {
+  await store.rpc('rv_enqueue_job', { _org: A.orgId, _kind: 'brief', _payload: { period: 'weekly' }, _dedupe: 'brief:test', _run_after: null, _max_attempts: 3, _created_by: A.user })
+  const claimed = await store.rpc('rv_claim_job', { _worker: 'w', _lease_seconds: 60, _kinds: ['brief'], _org: A.orgId })
+  assert.equal(claimed[0].created_by, A.user)
+  const p = await createProposal({ store, ctx: { orgId: A.orgId, userId: A.user, role: 'member' }, dealId: A.dealId('d1'), kind: 'email_draft', payload: { subject: 's', body: 'b' } })
+  const { editProposal } = await import('../../api/_lib/revenue/actions.js')
+  await assert.rejects(editProposal({ store, ctx: { orgId: A.orgId, userId: A.user, role: 'member' }, proposalId: p.id, baseVersion: NaN, payload: { subject: 'x', body: 'y' } }), e => e.status === 400)
+  await assert.rejects(approveProposal({ store, ctx: { orgId: A.orgId, userId: A.user, role: 'admin' }, proposalId: p.id, version: undefined, hash: 'h' }), e => e.status === 400)
+  // and the SQL itself is null-safe if a caller bypasses the API
+  const r = await store.rpc('rv_edit_proposal', { _org: A.orgId, _proposal: p.id, _base_version: null, _payload: { subject: 'z', body: 'z' }, _hash: 'h', _editor: A.user, _request_id: null })
+  assert.equal(r[0].result, 'stale_version')
+})
+
+test('review round 2: HubSpot client forces a token refresh only right after a 401', async () => {
+  const { createHubSpotClient } = await import('../../api/_lib/hubspot/client.js')
+  const forced = []
+  let n = 0
+  const fetchImpl = async () => { n++; return n === 1 ? new Response('{}', { status: 401 }) : n === 2 ? new Response('{}', { status: 429, headers: { 'retry-after': '0' } }) : Response.json({ ok: true }) }
+  const c = createHubSpotClient({ getToken: async ({ force }) => { forced.push(!!force); return 't' }, fetchImpl, sleep: async () => {}, random: () => 0 })
+  assert.deepEqual(await c.get('/x'), { ok: true })
+  assert.deepEqual(forced, [false, true, false])                                                          // 401 -> forced once; the 429 retry does not force again
+})
