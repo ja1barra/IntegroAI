@@ -9,6 +9,7 @@ import { hubspotRecordUrl } from '../hubspot/links.js'
 import { getFlags } from '../auth.js'
 import { HttpError } from '../http.js'
 import { parseDecimal } from '../rules/decimal.js'
+import { selectAll } from '../store.js'
 
 export const BRIEF_PROMPT_VERSION = 'brief-v1'
 const SEVERITY_RANK = { high: 0, medium: 1, low: 2, info: 3 }
@@ -38,7 +39,7 @@ export async function latestSnapshot(store, orgId) {
 export async function buildBriefContent({ store, orgId, snapshot, previous, period }) {
   const [conn] = await store.select('crm_connections', { where: { organization_id: orgId, status: { neq: 'disconnected' } }, columns: 'portal_id' })
   const comparable = previous && previous.rules_version === snapshot.rules_version
-  const findings = await store.select('revenue_findings', { where: { organization_id: orgId, status: 'open' }, columns: 'id,deal_id,rule_key,category,severity,evidence,recommendation,first_seen_at', limit: 1000 })
+  const findings = await selectAll(store, 'revenue_findings', { where: { organization_id: orgId, status: 'open' }, columns: 'id,deal_id,rule_key,category,severity,evidence,recommendation,first_seen_at', order: 'id.asc' })
   const dealIds = [...new Set(findings.map(f => f.deal_id))]
   const deals = []
   for (let i = 0; i < dealIds.length; i += 150) deals.push(...await store.select('crm_deals', { where: { organization_id: orgId, id: { in: dealIds.slice(i, i + 150) } }, columns: 'id,external_id,name,amount::text,currency,archived' }))

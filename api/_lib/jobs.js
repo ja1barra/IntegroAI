@@ -12,6 +12,7 @@ import { executeAction, reconcileExecution } from './revenue/actions.js'
 import { decrypt, encrypt } from './crypto.js'
 import { getFlags } from './auth.js'
 import { sanitizeError, HttpError } from './http.js'
+import { enqueueScheduledSyncs } from './revenue/syncRequest.js'
 
 const LEASE_SECONDS = 120
 
@@ -90,7 +91,9 @@ async function handleJob(job, { store, config, workerId, fetchImpl, ai, log, dea
 /** Process jobs until the budget is spent. Returns a small summary for logs. */
 export async function runWorkerTick({ store, config, ai, orgId = null, budgetMs = config.workerBudgetMs, fetchImpl = fetch, now = () => Date.now(), log = () => {}, workerId = `w-${randomUUID().slice(0, 8)}` }) {
   const started = now(), hardStop = started + budgetMs
-  const summary = { processed: 0, succeeded: 0, retried: 0, failed: 0, continued: 0 }
+  const summary = { processed: 0, succeeded: 0, retried: 0, failed: 0, continued: 0, scheduled_syncs: 0 }
+  // Scheduler mode (all orgs): keep diagnoses fresh. The per-org "kick" never schedules anything.
+  if (!orgId) summary.scheduled_syncs = await enqueueScheduledSyncs({ store, enqueue, olderThanHours: config.autoSyncHours, now: now(), log }).catch(() => 0)
   while (now() < hardStop - 2000) {
     const claimed = await store.rpc('rv_claim_job', { _worker: workerId, _lease_seconds: LEASE_SECONDS, _kinds: null, _org: orgId })
     const job = Array.isArray(claimed) ? claimed[0] : claimed

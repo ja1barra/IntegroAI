@@ -14,6 +14,7 @@ import { overview, listFindings, listDeals, dealDetail, parseFilters, setFinding
 import { askIntegro } from './revenue/ask.js'
 import { createProposal, editProposal, approveProposal, rejectProposal } from './revenue/actions.js'
 import { enqueue, runWorkerTick } from './jobs.js'
+import { requestSync } from './revenue/syncRequest.js'
 
 const isUuid = v => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(v))
 const needUuid = (v, name = 'id') => { if (!isUuid(v)) throw badRequest(`${name} must be a UUID`); return v }
@@ -70,21 +71,7 @@ export function createHandler(overrides = {}) {
   route('POST', 'revenue/rules', { auth: 'user', flag: 'revenue_mvp_enabled' }, async ({ ctx, body, rid }) => ({ status: 201, body: await publishRuleset({ store, ctx, body, requestId: rid }) }))
 
   // ── sync & jobs ───────────────────────────────────────────────────────────
-  route('POST', 'revenue/sync', { auth: 'user', flag: 'revenue_mvp_enabled', role: 'sync' }, async ({ ctx, body }) => {
-    const [conn] = await store.select('crm_connections', { where: { organization_id: ctx.orgId, status: { neq: 'disconnected' } } })
-    if (!conn) throw new HttpError(409, 'not_connected', 'Connect HubSpot first')
-    if (conn.status !== 'active') throw new HttpError(409, 'reconnect_required', 'The HubSpot connection must be re-authorized')
-    const active = await store.select('revenue_sync_runs', { where: { organization_id: ctx.orgId, status: { in: ['queued', 'running'] } }, order: 'created_at.asc', limit: 1 })
-    if (active[0]) return { status: 202, body: { sync_run_id: active[0].id, deduped: true } }
-    const [prior] = await store.select('revenue_sync_runs', { where: { organization_id: ctx.orgId, status: { in: ['succeeded', 'partial'] } }, limit: 1, columns: 'id' })
-    const kind = body.full === true || !prior ? 'full' : 'incremental'
-    const [run] = await store.insert('revenue_sync_runs', [{ organization_id: ctx.orgId, connection_id: conn.id, kind, status: 'queued', requested_by: ctx.userId }])
-    const jobId = await enqueue(store, { orgId: ctx.orgId, kind: 'sync', payload: { sync_run_id: run.id, connection_id: conn.id }, dedupe: `sync:${ctx.orgId}`, maxAttempts: 8, userId: ctx.userId })
-    await store.update('revenue_sync_runs', { id: run.id, organization_id: ctx.orgId }, { job_id: jobId })
-    const oldest = (await store.select('revenue_sync_runs', { where: { organization_id: ctx.orgId, status: { in: ['queued', 'running'] } }, order: 'created_at.asc', limit: 1 }))[0]
-    if (oldest && oldest.id !== run.id) { await store.update('revenue_sync_runs', { id: run.id, organization_id: ctx.orgId }, { status: 'cancelled', error: 'duplicate request' }); return { status: 202, body: { sync_run_id: oldest.id, job_id: oldest.job_id, deduped: true } } }
-    return { status: 202, body: { job_id: jobId, sync_run_id: run.id, kind } }
-  })
+  route('POST', 'revenue/sync', { auth: 'user', flag: 'revenue_mvp_enabled', role: 'sync' }, async ({ ctx, body }) => ({ status: 202, body: await requestSync({ store, enqueue, orgId: ctx.orgId, userId: ctx.userId, full: body.full === true }) }))
   route('GET', 'revenue/jobs/:id', { auth: 'user', flag: 'revenue_mvp_enabled', role: 'view' }, async ({ ctx, params, query }) => {
     needUuid(params.id)
     const rows = await store.rpc('rv_get_job', { _org: ctx.orgId, _id: params.id })

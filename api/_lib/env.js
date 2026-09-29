@@ -25,6 +25,7 @@ export function cfg(env = process.env) {
       maxOutputTokens: Number(env.OPENAI_MAX_OUTPUT_TOKENS) || 1800,
     },
     workerSecret: env.REVENUE_WORKER_SECRET,
+    autoSyncHours: Number.isFinite(Number(env.REVENUE_AUTO_SYNC_HOURS)) && env.REVENUE_AUTO_SYNC_HOURS !== undefined ? Number(env.REVENUE_AUTO_SYNC_HOURS) : 6,
     workerBudgetMs: Number(env.REVENUE_WORKER_BUDGET_MS) || 40000,
     encryption: {
       key: env.CREDENTIALS_ENCRYPTION_KEY,

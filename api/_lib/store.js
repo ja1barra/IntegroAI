@@ -20,7 +20,8 @@ function qs(where = {}) {
   for (const [k, v] of Object.entries(where)) {
     if (v === undefined) continue
     if (v !== null && typeof v === 'object' && !Array.isArray(v)) {
-      if ('in' in v) p.push([k, `in.(${v.in.map(x => encodeURIComponent(String(x)).replace(/[(),]/g, c => '%' + c.charCodeAt(0).toString(16))).join(',')})`])
+      // PostgREST list syntax: quote each item (escape \\ and \") so commas/parentheses inside values are safe.
+      if ('in' in v) p.push([k, `in.(${v.in.map(x => `"${String(x).replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`).join(',')})`])
       else if ('gte' in v) p.push([k, `gte.${v.gte}`])
       else if ('lte' in v) p.push([k, `lte.${v.lte}`])
       else if ('gt' in v) p.push([k, `gt.${v.gt}`])
@@ -99,4 +100,15 @@ export async function insertChunked(store, table, rows, opts, size = 200) {
   const out = []
   for (let i = 0; i < rows.length; i += size) out.push(...(await store.insert(table, rows.slice(i, i + size), opts)))
   return out
+}
+
+// Read every row page by page (PostgREST caps a response at its max-rows, 1000 by default),
+// so reference tables are never silently truncated.
+export async function selectAll(store, table, opts = {}, page = 1000) {
+  const out = []
+  for (let offset = 0; ; offset += page) {
+    const rows = await store.select(table, { ...opts, limit: page, offset })
+    out.push(...rows)
+    if (rows.length < page) return out
+  }
 }

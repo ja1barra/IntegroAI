@@ -5,7 +5,10 @@ import Avatar from '../ui/Avatar'
 import { Icon } from '../ui/Icon'
 import type { IconName } from '../ui/Icon'
 
+import { t } from '../../lib/revenue/i18n'
+
 interface Props {
+  revenueNav?: boolean
   view: string
   setView: (v: string) => void
   agentStates: AgentStates
@@ -39,19 +42,53 @@ const NAV_GROUPS: { label?: string; quiet?: boolean; items: NavItem[] }[] = [
   ]},
 ]
 
-export default function Sidebar({ view, setView, agentStates, user, onLogout, poweredByVisible }: Props) {
+// Navigation for workspaces switched to Revenue Manager. The AI Provider /
+// client keys / models, SDR agents and sequences are intentionally absent.
+const REVENUE_NAV_GROUPS: { label?: string; quiet?: boolean; items: NavItem[] }[] = [
+  { label: t('group.revenue'), items: [
+    { id: 'rv-overview', icon: 'dashboard',       label: t('nav.overview') },
+    { id: 'rv-doctor',   icon: 'healthScore',     label: t('nav.doctor') },
+    { id: 'rv-deals',    icon: 'pipeline',        label: t('nav.deals') },
+    { id: 'rv-brief',    icon: 'openBook',        label: t('nav.brief') },
+    { id: 'rv-ask',      icon: 'sparkles',        label: t('nav.ask') },
+    { id: 'rv-actions',  icon: 'approvals',       label: t('nav.actions') },
+  ]},
+  { quiet: true, items: [
+    { id: 'rv-settings', icon: 'integrations', label: t('nav.integrations') },
+    { id: 'team',        icon: 'team',         label: 'Team' },
+    { id: 'settings',    icon: 'settings',     label: 'Settings' },
+  ]},
+]
+
+export default function Sidebar({ view, setView, agentStates, user, onLogout, poweredByVisible, revenueNav }: Props) {
   const [menuOpen, setMenuOpen] = useState(false)
+  const groups = revenueNav ? REVENUE_NAV_GROUPS : NAV_GROUPS
 
   return (
+    <>
+      {revenueNav && (
+        // The sidebar is hidden below 900px; keep Revenue Manager reachable on phones.
+        <nav className="rv-mobile-nav" aria-label="Revenue Manager">
+          {REVENUE_NAV_GROUPS.flatMap(g => g.items).filter(i => i.id.startsWith('rv-')).map(item => (
+            <button key={item.id} className={view === item.id ? 'is-active' : ''} aria-current={view === item.id ? 'page' : undefined} onClick={() => setView(item.id)}>
+              <Icon name={item.icon} size={16} /><span>{item.label}</span>
+            </button>
+          ))}
+        </nav>
+      )}
     <aside className="sidebar">
-      {NAV_GROUPS.map((g, i) => (
+      {groups.map((g, i) => (
         <div key={g.label ?? `group-${i}`} className={`sidebar-section ${g.quiet ? 'sidebar-section-quiet' : ''}`}>
           {g.label && <div className="sidebar-label">{g.label}</div>}
           {g.items.map(item => (
             <div
               key={item.id}
               className={`sidebar-nav-item ${view === item.id ? 'active' : ''}`}
+              role="button"
+              tabIndex={0}
+              aria-current={view === item.id ? 'page' : undefined}
               onClick={() => setView(item.id)}
+              onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setView(item.id) } }}
             >
               <span className="nav-icon"><Icon name={item.icon} size={15} /></span>
               {item.label}
@@ -103,5 +140,6 @@ export default function Sidebar({ view, setView, agentStates, user, onLogout, po
         </div>
       </div>
     </aside>
+    </>
   )
 }

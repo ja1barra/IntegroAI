@@ -7,18 +7,11 @@ import { aggregate } from '../rules/aggregate.js'
 import { mergeRuleset, ENGINE_VERSION } from '../rules/defaults.js'
 import { reconcile } from '../rules/findings.js'
 import { computeStageStats } from '../rules/stagestats.js'
-import { insertChunked } from '../store.js'
+import { insertChunked, selectAll } from '../store.js'
 
 export const filtersHash = filters => createHash('sha256').update(canonicalJson(filters ?? {})).digest('hex')
 
-async function pageAll(store, table, opts, page = 1000) {
-  const out = []
-  for (let offset = 0; ; offset += page) {
-    const rows = await store.select(table, { ...opts, limit: page, offset })
-    out.push(...rows)
-    if (rows.length < page) return out
-  }
-}
+const pageAll = selectAll
 
 export async function getActiveRuleset(store, orgId, { createIfMissing = true } = {}) {
   const rows = await store.select('revenue_rule_sets', { where: { organization_id: orgId }, order: 'version.desc', limit: 1 })
@@ -40,9 +33,9 @@ export async function evaluateOrg({ store, orgId, asOf = new Date().toISOString(
   const scope = { organization_id: orgId, connection_id: conn.id }
 
   const [pipelines, stages, owners] = await Promise.all([
-    store.select('crm_pipelines', { where: scope, columns: 'id,external_id' }),
-    store.select('crm_stages', { where: scope, columns: 'id,external_id,pipeline_id,category,is_closed' }),
-    store.select('crm_owners', { where: scope, columns: 'id,archived' }),
+    selectAll(store, 'crm_pipelines', { where: scope, columns: 'id,external_id', order: 'id.asc' }),
+    selectAll(store, 'crm_stages', { where: scope, columns: 'id,external_id,pipeline_id,category,is_closed', order: 'id.asc' }),
+    selectAll(store, 'crm_owners', { where: scope, columns: 'id,archived', order: 'id.asc' }),
   ])
   const selected = new Set(settings?.selected_pipeline_ids ?? [])
   const pipeById = new Map(pipelines.map(p => [p.id, p]))

@@ -8,6 +8,7 @@ import { filtersHash } from './evaluate.js'
 import { isSuppressed } from '../rules/findings.js'
 import { hubspotRecordUrl } from '../hubspot/links.js'
 import { badRequest, notFound } from '../http.js'
+import { selectAll } from '../store.js'
 
 const chunk = (arr, n) => { const out = []; for (let i = 0; i < arr.length; i += n) out.push(arr.slice(i, i + n)); return out }
 const SEVERITY_RANK = { high: 0, medium: 1, low: 2, info: 3 }
@@ -41,12 +42,14 @@ export async function loadSnapshotDeals(store, orgId, snapshotId) {
   const evals = new Map(), deals = new Map()
   for (const c of chunk(items.map(i => i.evaluation_id), 150)) for (const e of await store.select('revenue_evaluations', { where: { organization_id: orgId, id: { in: c } } })) evals.set(e.id, e)
   for (const c of chunk(items.map(i => i.deal_id), 150)) for (const d of await store.select('crm_deals', { where: { organization_id: orgId, id: { in: c } }, columns: 'id,external_id,name,amount::text,currency,close_at,stage_id,stage_external_id,pipeline_id,owner_id,owner_external_id,company_id,stage_entered_at,archived,field_states' })) deals.set(d.id, d)
-  const [stages, pipelines, owners, companies] = await Promise.all([
-    store.select('crm_stages', { where: { organization_id: orgId }, columns: 'id,external_id,label,category,is_closed,display_order' }),
-    store.select('crm_pipelines', { where: { organization_id: orgId }, columns: 'id,external_id,label' }),
-    store.select('crm_owners', { where: { organization_id: orgId }, columns: 'id,external_id,name,archived' }),
-    store.select('crm_companies', { where: { organization_id: orgId }, columns: 'id,name' }),
+  const [stages, pipelines, owners] = await Promise.all([
+    selectAll(store, 'crm_stages', { where: { organization_id: orgId }, columns: 'id,external_id,label,category,is_closed,display_order', order: 'id.asc' }),
+    selectAll(store, 'crm_pipelines', { where: { organization_id: orgId }, columns: 'id,external_id,label', order: 'id.asc' }),
+    selectAll(store, 'crm_owners', { where: { organization_id: orgId }, columns: 'id,external_id,name,archived', order: 'id.asc' }),
   ])
+  // companies only for the deals in this snapshot (never an unbounded table read)
+  const companies = []
+  for (const c of chunk([...new Set([...deals.values()].map(d => d.company_id).filter(Boolean))], 150)) companies.push(...await store.select('crm_companies', { where: { organization_id: orgId, id: { in: c } }, columns: 'id,name' }))
   return { rows: items.map(i => ({ deal: deals.get(i.deal_id), evaluation: evals.get(i.evaluation_id) })).filter(r => r.deal && r.evaluation && !r.deal.archived), stages, pipelines, owners, companies }
 }
 
@@ -62,12 +65,8 @@ const aggInput = rows => rows.map(r => ({ id: r.deal.id, amount: r.deal.amount, 
 export async function loadFindings(store, orgId, { statusFilter = 'open' } = {}) {
   const where = { organization_id: orgId }
   if (statusFilter === 'open' || statusFilter === 'resolved') where.status = statusFilter
-  const rows = []
-  for (let off = 0; ; off += 1000) {
-    const page = await store.select('revenue_findings', { where, order: 'id.asc', limit: 1000, offset: off })
-    rows.push(...page); if (page.length < 1000) break
-  }
-  const prefs = new Map((await store.select('revenue_finding_preferences', { where: { organization_id: orgId } })).map(p => [p.finding_id, p]))
+  const rows = await selectAll(store, 'revenue_findings', { where, order: 'id.asc' })
+  const prefs = new Map((await selectAll(store, 'revenue_finding_preferences', { where: { organization_id: orgId }, order: 'id.asc' })).map(p => [p.finding_id, p]))
   return { rows, prefs }
 }
 

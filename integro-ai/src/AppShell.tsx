@@ -19,6 +19,14 @@ import IntegrationsView from './views/IntegrationsView'
 import TeamView from './views/TeamView'
 import SettingsView from './views/SettingsView'
 import AcademyView from './views/AcademyView'
+import { RevenueProvider, useRevenue } from './lib/revenue/RevenueContext'
+import OverviewView from './views/revenue/OverviewView'
+import PipelineDoctorView from './views/revenue/PipelineDoctorView'
+import DealsView from './views/revenue/DealsView'
+import BriefView from './views/revenue/BriefView'
+import AskView from './views/revenue/AskView'
+import ActionsView from './views/revenue/ActionsView'
+import RevenueSettingsView from './views/revenue/RevenueSettingsView'
 import { useTasks } from './hooks/useTasks'
 import { usePlaybooks } from './hooks/usePlaybooks'
 import type { User, AgentStates, AgentId, Toast, Tweaks, Task, WhiteLabel } from './types'
@@ -95,8 +103,21 @@ async function persistSettings(userId: string, agentStates: AgentStates, tweaks:
   return error
 }
 
-export default function AppShell({ user, userId, onLogout }: { user: User; userId: string; onLogout: () => void }) {
-  const [view, setView] = useState('dashboard')
+export default function AppShell(props: { user: User; userId: string; onLogout: () => void }) {
+  return (
+    <RevenueProvider>
+      <AppShellInner {...props} />
+    </RevenueProvider>
+  )
+}
+
+function AppShellInner({ user, userId, onLogout }: { user: User; userId: string; onLogout: () => void }) {
+  const { ctx: revCtx, loading: revLoading } = useRevenue()
+  // Workspaces switched to Revenue Manager (server flag) get the new navigation;
+  // everyone else keeps the current app until they are migrated.
+  const revenueMode = revCtx?.flags.revenue_mvp_enabled === true
+  const [selectedDeal, setSelectedDeal] = useState<string | null>(null)
+  const [view, setView] = useState(() => (new URLSearchParams(window.location.search).get('hubspot') ? 'rv-settings' : 'dashboard'))
   const [agentStates, setAgentStates] = useState<AgentStates>(DEFAULT_AGENT_STATES)
   const [notifOpen, setNotifOpen] = useState(false)
   const [toasts, setToasts] = useState<Toast[]>([])
@@ -314,6 +335,11 @@ export default function AppShell({ user, userId, onLogout }: { user: User; userI
   }, [])
 
   const sharedProps = { agentStates, toggleAgent, addToast }
+  const openDeal = useCallback((id: string) => { setSelectedDeal(id); setView('rv-deals') }, [])
+  // Once the server says this workspace is on Revenue Manager, land on its Overview
+  // (unless we came back from the HubSpot OAuth redirect).
+  useEffect(() => { if (revenueMode) setView(v => (v === 'dashboard' ? 'rv-overview' : v)) }, [revenueMode])
+  const rv = { addToast, onNavigate: setView, onOpenDeal: openDeal }
 
   // Prefer the logo matching the current theme, falling back to the other
   // one if only a single logo was uploaded.
@@ -334,9 +360,24 @@ export default function AppShell({ user, userId, onLogout }: { user: User; userI
         <Sidebar
           view={view} setView={(v) => { setView(v); setNotifOpen(false) }} agentStates={agentStates} user={user} onLogout={onLogout}
           poweredByVisible={!!branding && branding.powered_by_badge}
+          revenueNav={revenueMode}
         />
 
         <main className="main" onClick={() => setNotifOpen(false)}>
+          {revLoading ? (
+            <div className="view active"><div className="rv-loading" role="status">Loading…</div></div>
+          ) : revenueMode ? (
+            <>
+              <OverviewView        active={view === 'rv-overview'} {...rv} />
+              <PipelineDoctorView  active={view === 'rv-doctor'}   {...rv} />
+              <DealsView           active={view === 'rv-deals'}    {...rv} selectedDealId={selectedDeal} onSelectDeal={setSelectedDeal} />
+              <BriefView           active={view === 'rv-brief'}    {...rv} />
+              <AskView             active={view === 'rv-ask'}      {...rv} />
+              <ActionsView         active={view === 'rv-actions'}  {...rv} />
+              <RevenueSettingsView active={view === 'rv-settings'} {...rv} />
+            </>
+          ) : (
+            <>
           <Dashboard         active={view === 'dashboard'}       onNavigate={setView} onNewTask={() => openTaskModal()} {...sharedProps} />
           <TasksView         active={view === 'tasks'}           tasks={tasks} onUpdateTask={updateTask} onDeleteTask={deleteTask} onOpenModal={openTaskModal} />
           <OutboundView      active={view === 'outbound'}         {...sharedProps} user={user} />
@@ -357,6 +398,18 @@ export default function AppShell({ user, userId, onLogout }: { user: User; userI
             branding={branding} brandingReady={brandingReady} onBrandingSaved={setBranding}
           />
           <AcademyView       active={view === 'academy'} />
+            </>
+          )}
+          {revenueMode && (
+            <>
+              <TeamView          active={view === 'team'}             addToast={addToast} user={user} />
+              <SettingsView
+                active={view === 'settings'} user={user} userId={userId} tweaks={tweaks} setTweak={setTweak} addToast={addToast} onLogout={onLogout}
+                branding={branding} brandingReady={brandingReady} onBrandingSaved={setBranding}
+              />
+              <AcademyView       active={view === 'academy'} />
+            </>
+          )}
         </main>
       </div>
 
