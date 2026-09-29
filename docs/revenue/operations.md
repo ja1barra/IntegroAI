@@ -37,6 +37,6 @@ No webhooks; `revenue_evaluations` grows by at most one row per open deal per da
 
 ## Commands
 ```bash
-npm install && npm test                         # 130 tests: rules, SQL/RLS/migrations (PGlite), sync, actions, AI, API e2e, legacy gate
+npm install && npm test                         # 133 tests: rules, SQL/RLS/migrations (PGlite), sync, actions, AI, API e2e, legacy gate
 cd integro-ai && npm install && npm run build   # tsc + vite build
 ```
