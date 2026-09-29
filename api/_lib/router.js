@@ -2,10 +2,10 @@
 // Hobby caps a deployment at 12 functions; see docs/revenue/architecture.md).
 // Centralizes request ids, auth/tenancy, error shape, validation and limits.
 
-import { timingSafeEqual, randomUUID } from 'node:crypto'
+import { timingSafeEqual } from 'node:crypto'
 import { cfg } from './env.js'
 import { createPostgrestStore } from './store.js'
-import { HttpError, sanitizeError, applyCors, badRequest, errorBody, forbidden, log as defaultLog, notFound, readJson, requestId, send, unauthorized } from './http.js'
+import { HttpError, sanitizeError, applyCors, badRequest, errorBody, log as defaultLog, notFound, readJson, requestId, send, unauthorized } from './http.js'
 import { resolveContext, requireCan, requireFlag, getFlags } from './auth.js'
 import { createOpenAIProvider } from './ai/openai.js'
 import { startConnect, handleCallback, connectionStatus, disconnect } from './revenue/connect.js'
@@ -86,7 +86,7 @@ export function createHandler(overrides = {}) {
     return { status: 200, body: { job, sync_run } }
   })
   // Runs a bounded worker slice for the caller's org (works without an external scheduler).
-  route('POST', 'revenue/worker/kick', { auth: 'user', flag: 'revenue_mvp_enabled', role: 'view' }, async ({ ctx, rid }) => ({ status: 200, body: await runWorkerTick({ store, config, ai, orgId: ctx.orgId, budgetMs: Math.min(config.workerBudgetMs, 25000), fetchImpl, log: (l, e, f) => log(l, e, { ...f, request_id: rid }), now }) }))
+  route('POST', 'revenue/worker/kick', { auth: 'user', flag: 'revenue_mvp_enabled', role: 'propose' }, async ({ ctx, rid }) => ({ status: 200, body: await runWorkerTick({ store, config, ai, orgId: ctx.orgId, budgetMs: Math.min(config.workerBudgetMs, 25000), fetchImpl, log: (l, e, f) => log(l, e, { ...f, request_id: rid }), now }) }))
 
   // ── read models ───────────────────────────────────────────────────────────
   const R = { auth: 'user', flag: 'revenue_mvp_enabled', role: 'view' }

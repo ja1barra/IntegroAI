@@ -74,7 +74,10 @@ export async function saveOnboarding({ store, ctx, body, requestId }) {
     const openStages = stagesNow.filter(s => selPipes.has(s.pipeline_id) && s.is_closed !== true)
     if (selPipes.size) state = 'pipeline_selected'
     if (selPipes.size && openStages.length && openStages.every(s => s.category !== 'unmapped')) state = 'stages_mapped'
-    if (state === 'stages_mapped' && body.confirm === true && merged.currency && merged.timezone) state = 'confirmed'
+    // A partial save (e.g. only the time zone) must not undo an earlier confirmation; only `confirm:false` does.
+    const wasConfirmed = ['confirmed', 'synced'].includes(cur?.onboarding_state ?? '')
+    const confirmNow = body.confirm === true || (wasConfirmed && body.confirm !== false)
+    if (state === 'stages_mapped' && confirmNow && merged.currency && merged.timezone) state = 'confirmed'
     if (cur?.onboarding_state === 'synced' && state === 'confirmed') state = 'synced'
   }
   patch.onboarding_state = state

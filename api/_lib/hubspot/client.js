@@ -55,14 +55,3 @@ export function createHubSpotClient({ apiBase = 'https://api.hubapi.com', getTok
     request,
   }
 }
-
-// Iterate a cursor-paginated list endpoint (results[] + paging.next.after).
-export async function* paginate(fetchPage, { startAfter, maxPages = Infinity } = {}) {
-  let after = startAfter, pages = 0
-  do {
-    const data = await fetchPage(after)
-    yield { results: data?.results ?? [], after: data?.paging?.next?.after ?? null }
-    after = data?.paging?.next?.after
-    pages++
-  } while (after && pages < maxPages)
-}

@@ -79,7 +79,10 @@ export async function editProposal({ store, ctx, proposalId, baseVersion, payloa
   needVersion(baseVersion)
   const [p] = await store.select('revenue_action_proposals', { where: { id: proposalId, organization_id: ctx.orgId } })
   if (!p) throw notFound('Proposal not found')
-  const clean = validatePayload(p.kind, payload)
+  // An unchanged due date is not re-validated as "future": editing only the subject of a proposal whose date has
+  // since passed must still be possible (the executor re-checks expiry anyway).
+  const keepDue = p.kind === 'create_task' && payload?.due_at !== undefined && payload.due_at === p.payload?.due_at
+  const clean = validatePayload(p.kind, payload, keepDue ? Date.parse(p.payload.due_at) - 60_000 : Date.now())
   const r = await store.rpc('rv_edit_proposal', { _org: ctx.orgId, _proposal: proposalId, _base_version: baseVersion, _payload: clean, _hash: payloadHash(p.kind, p.deal_id, clean), _editor: ctx.userId, _request_id: requestId ?? null })
   const row = Array.isArray(r) ? r[0] : r
   if (row.result === 'forbidden') throw forbidden()
@@ -118,6 +121,12 @@ export async function rejectProposal({ store, ctx, proposalId, reason, requestId
 const finish = (store, orgId, execId, status, { externalId = null, uncertain = false, error = null, proposalStatus = null } = {}) =>
   store.rpc('rv_finish_execution', { _org: orgId, _exec: execId, _status: status, _external_id: externalId, _uncertain: uncertain, _error: error ? sanitizeError(error, 400) : null, _proposal_status: proposalStatus })
 
+// Outcome unknown => human/system reconciliation, never a blind retry. Always paired with a reconcile job.
+async function markUncertain(store, orgId, executionId, error, { externalId = null, now = () => Date.now() } = {}) {
+  await finish(store, orgId, executionId, 'needs_review', { uncertain: true, error, externalId })
+  await store.rpc('rv_enqueue_job', { _org: orgId, _kind: 'reconcile', _payload: { execution_id: executionId }, _dedupe: `reconcile:${executionId}`, _run_after: new Date(now() + 10 * 60_000).toISOString(), _max_attempts: 6, _created_by: null }).catch(() => {})
+}
+
 /**
  * Runs one approved execution. Returns { outcome } and never throws for business
  * failures (they are recorded). `getClient(connectionId)` builds an authenticated HubSpot client.
@@ -135,7 +144,9 @@ export async function executeAction({ store, orgId, executionId, getClient, now 
   } catch (e) {
     log('error', 'action.execute_error', { org_id: orgId, execution_id: executionId, write_started: writeStarted })
     const status = writeStarted ? 'needs_review' : 'failed'
-    await finish(store, orgId, executionId, status, { uncertain: writeStarted, error: `unexpected error: ${sanitizeError(e, 120)}` }).catch(() => {})
+    const msg = `unexpected error: ${sanitizeError(e, 120)}`
+    if (writeStarted) await markUncertain(store, orgId, executionId, msg, { now }).catch(() => {})
+    else await finish(store, orgId, executionId, 'failed', { error: msg }).catch(() => {})
     return { outcome: status }
   }
 
@@ -193,10 +204,10 @@ export async function executeAction({ store, orgId, executionId, getClient, now 
         associations: [{ to: { id: deal.external_id }, types: [{ associationCategory: 'HUBSPOT_DEFINED', associationTypeId: TASK_ASSOC_DEAL_TYPE_ID }] }],
       })
       const id = created?.id ? String(created.id) : null
-      if (!id) return fail('needs_review', 'HubSpot did not return a task id', { uncertain: true })
+      if (!id) { await markUncertain(store, orgId, executionId, 'HubSpot did not return a task id', { now }); return { outcome: 'needs_review' } }
       // 6. verify the result exists
       try { await client.get(`/crm/v3/objects/tasks/${id}`, { properties: 'hs_task_subject' }) }
-      catch { return fail('needs_review', 'task created but could not be verified', { externalId: id, uncertain: true }) }
+      catch { await markUncertain(store, orgId, executionId, 'task created but could not be verified', { externalId: id, now }); return { outcome: 'needs_review' } }
       await finish(store, orgId, executionId, 'succeeded', { externalId: id })
       return { outcome: 'succeeded', external_id: id }
     }
@@ -212,8 +223,7 @@ export async function executeAction({ store, orgId, executionId, getClient, now 
     // Nothing was sent yet (the failure hit the precondition read): the action simply did not run.
     if (!writeStarted) return fail('failed', 'HubSpot could not be reached before writing; nothing was written. Create a new proposal to try again.')
     // network error / timeout / 5xx after a possible write: outcome unknown => reconcile, never blind retry
-    await finish(store, orgId, executionId, 'needs_review', { uncertain: true, error: `outcome unknown after ${e?.name ?? 'error'}: ${sanitizeError(e, 120)}` })
-    await store.rpc('rv_enqueue_job', { _org: orgId, _kind: 'reconcile', _payload: { execution_id: executionId }, _dedupe: `reconcile:${executionId}`, _run_after: new Date(now() + 10 * 60_000).toISOString(), _max_attempts: 6, _created_by: null })
+    await markUncertain(store, orgId, executionId, `outcome unknown after ${e?.name ?? 'error'}: ${sanitizeError(e, 120)}`, { now })
     return { outcome: 'needs_review' }
   }
   }

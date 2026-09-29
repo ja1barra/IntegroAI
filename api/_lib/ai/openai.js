@@ -23,7 +23,7 @@ export function createOpenAIProvider(config, { clientFactory } = {}) {
   }
   return {
     available, model: model ?? null, maxOutputTokens,
-    async respond({ instructions, input, tools, schema, maxTokens }) {
+    async respond({ instructions, input, tools, schema, maxTokens, timeoutMs: callTimeoutMs }) {
       if (!available) throw new AIUnavailable('not_configured', 'OPENAI_API_KEY / OPENAI_MODEL are not configured')
       const c = await getClient()
       let resp
@@ -33,7 +33,8 @@ export function createOpenAIProvider(config, { clientFactory } = {}) {
           max_output_tokens: maxTokens ?? maxOutputTokens,
           ...(tools?.length ? { tools } : {}),
           ...(schema ? { text: { format: { type: 'json_schema', name: schema.name, strict: true, schema: schema.schema } } } : {}),
-        })
+        // A caller with a hard deadline (Ask) bounds THIS call: total time = one attempt, no hidden SDK retries.
+        }, callTimeoutMs ? { timeout: callTimeoutMs, maxRetries: 0 } : undefined)
       } catch (e) {
         if (e?.name === 'APIConnectionTimeoutError' || /timed? ?out/i.test(e?.message ?? '')) throw new AIUnavailable('timeout', 'The AI request timed out')
         throw new AIUnavailable('provider_error', `AI provider error${e?.status ? ` (${e.status})` : ''}`)

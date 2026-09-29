@@ -349,3 +349,9 @@ test('worker tick also answers GET (Vercel Cron) and accepts CRON_SECRET as the 
   assert.equal(cfg({ CRON_SECRET: 'cron-s' }).workerSecret, 'cron-s')
   assert.equal(cfg({ CRON_SECRET: 'cron-s', REVENUE_WORKER_SECRET: 'w' }).workerSecret, 'w')
 })
+
+test('worker kick is not available to viewers (they cannot drive the org queue)', async () => {
+  await store.update('revenue_org_flags', { organization_id: users.orgA }, { revenue_mvp_enabled: true })
+  assert.equal((await call('POST', 'revenue/worker/kick', { token: 't-view', body: {} })).statusCode, 403)
+  assert.equal((await call('POST', 'revenue/worker/kick', { token: 't-mem', body: {} })).statusCode, 200)
+})

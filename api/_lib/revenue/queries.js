@@ -36,15 +36,33 @@ async function connectionInfo(store, orgId) {
 }
 
 // Deals + their evaluation in a snapshot, with the reference data needed for filters/labels.
+// Overview / Findings / Deals are opened together and each needs the same join: cache it briefly per snapshot
+// (a snapshot's items and evaluations are immutable; deal fields can change, hence the short TTL).
+const SNAPSHOT_CACHE_TTL_MS = 20_000
+const snapshotCache = new Map()
+export const clearSnapshotCache = () => snapshotCache.clear()
+
+const inParallel = async (parts, fn, width = 6) => { const out = []; for (let i = 0; i < parts.length; i += width) out.push(...await Promise.all(parts.slice(i, i + width).map(fn))); return out }
+
 export async function loadSnapshotDeals(store, orgId, snapshotId) {
+  const key = `${orgId}:${snapshotId}`
+  const hit = snapshotCache.get(key)
+  if (hit && Date.now() - hit.at < SNAPSHOT_CACHE_TTL_MS) return hit.value
+  const value = await loadSnapshotDealsUncached(store, orgId, snapshotId)
+  snapshotCache.set(key, { at: Date.now(), value })
+  if (snapshotCache.size > 20) snapshotCache.delete(snapshotCache.keys().next().value)
+  return value
+}
+
+async function loadSnapshotDealsUncached(store, orgId, snapshotId) {
   const items = []
   for (let off = 0; ; off += 1000) {
     const page = await store.select('revenue_snapshot_items', { where: { snapshot_id: snapshotId, organization_id: orgId }, columns: 'deal_id,evaluation_id', order: 'deal_id.asc', limit: 1000, offset: off })
     items.push(...page); if (page.length < 1000) break
   }
   const evals = new Map(), deals = new Map()
-  for (const c of chunk(items.map(i => i.evaluation_id), IN_CHUNK)) for (const e of await store.select('revenue_evaluations', { where: { organization_id: orgId, id: { in: c } } })) evals.set(e.id, e)
-  for (const c of chunk(items.map(i => i.deal_id), IN_CHUNK)) for (const d of await store.select('crm_deals', { where: { organization_id: orgId, id: { in: c } }, columns: 'id,external_id,name,amount::text,currency,close_at,stage_id,stage_external_id,pipeline_id,owner_id,owner_external_id,company_id,stage_entered_at,archived,field_states' })) deals.set(d.id, d)
+  for (const part of await inParallel(chunk(items.map(i => i.evaluation_id), IN_CHUNK), c => store.select('revenue_evaluations', { where: { organization_id: orgId, id: { in: c } } }))) for (const e of part) evals.set(e.id, e)
+  for (const part of await inParallel(chunk(items.map(i => i.deal_id), IN_CHUNK), c => store.select('crm_deals', { where: { organization_id: orgId, id: { in: c } }, columns: 'id,external_id,name,amount::text,currency,close_at,stage_id,stage_external_id,pipeline_id,owner_id,owner_external_id,company_id,stage_entered_at,archived,field_states' }))) for (const d of part) deals.set(d.id, d)
   // reference data of the live connection only (a disconnected portal's mirror is kept for history, not displayed)
   const [live] = await store.select('crm_connections', { where: { organization_id: orgId, status: { neq: 'disconnected' } }, columns: 'id' })
   const refScope = live ? { organization_id: orgId, connection_id: live.id } : { organization_id: orgId }
@@ -186,7 +204,7 @@ export async function listDeals({ store, orgId, filters = {}, limit = 25, offset
 }
 
 export async function dealDetail({ store, orgId, dealId, now = new Date().toISOString() }) {
-  const [deal] = await store.select('crm_deals', { where: { id: dealId, organization_id: orgId }, columns: 'id,external_id,name,amount::text,currency,close_at,stage_id,stage_external_id,pipeline_id,owner_id,company_id,owner_state,stage_entered_at,stage_entered_source,created_at_source,source_updated_at,synced_at,archived,field_states' })
+  const [deal] = await store.select('crm_deals', { where: { id: dealId, organization_id: orgId }, columns: 'id,external_id,connection_id,name,amount::text,currency,close_at,stage_id,stage_external_id,pipeline_id,owner_id,company_id,owner_state,stage_entered_at,stage_entered_source,created_at_source,source_updated_at,synced_at,archived,field_states' })
   if (!deal) throw notFound('Deal not found')
   const conn = await connectionInfo(store, orgId)
   const [stage, pipeline, owner, company] = await Promise.all([
@@ -196,13 +214,15 @@ export async function dealDetail({ store, orgId, dealId, now = new Date().toISOS
   const [evaluation] = await store.select('revenue_evaluations', { where: { organization_id: orgId, deal_id: dealId }, order: 'created_at.desc', limit: 1 })
   const findings = await store.select('revenue_findings', { where: { organization_id: orgId, deal_id: dealId }, order: 'first_seen_at.desc' })
   const prefs = new Map(findings.length ? (await store.select('revenue_finding_preferences', { where: { organization_id: orgId, finding_id: { in: findings.map(f => f.id) } } })).map(p => [p.finding_id, p]) : [])
-  const links = await store.select('crm_associations', { where: { organization_id: orgId, deleted_at: { isnull: true }, to_external_id: deal.external_id, to_type: 'deal' }, columns: 'from_type,from_external_id', limit: 300 })
-  const contactLinks = await store.select('crm_associations', { where: { organization_id: orgId, deleted_at: { isnull: true }, from_type: 'deal', from_external_id: deal.external_id, to_type: 'contact' }, columns: 'to_external_id', limit: 100 })
-  const contacts = contactLinks.length ? await store.select('crm_contacts', { where: { organization_id: orgId, external_id: { in: contactLinks.map(c => c.to_external_id) } }, columns: 'external_id,first_name,last_name,job_title' }) : []
+  // HubSpot ids are only unique per portal: every association/contact/activity read is scoped to the deal's own connection
+  const cs = { organization_id: orgId, connection_id: deal.connection_id }
+  const links = await store.select('crm_associations', { where: { ...cs, deleted_at: { isnull: true }, to_external_id: deal.external_id, to_type: 'deal' }, columns: 'from_type,from_external_id', limit: 300 })
+  const contactLinks = await store.select('crm_associations', { where: { ...cs, deleted_at: { isnull: true }, from_type: 'deal', from_external_id: deal.external_id, to_type: 'contact' }, columns: 'to_external_id', limit: 100 })
+  const contacts = contactLinks.length ? await store.select('crm_contacts', { where: { ...cs, external_id: { in: contactLinks.map(c => c.to_external_id) } }, columns: 'external_id,first_name,last_name,job_title' }) : []
   const activities = []
   for (const t of ['call', 'email', 'meeting', 'task']) {
     const ids = links.filter(l => l.from_type === t).map(l => l.from_external_id)
-    if (ids.length) activities.push(...await store.select('crm_activities', { where: { organization_id: orgId, type: t, external_id: { in: ids.slice(0, 100) } }, columns: 'id,type,occurred_at,due_at,status,direction,subject' }))
+    if (ids.length) activities.push(...await store.select('crm_activities', { where: { ...cs, type: t, external_id: { in: ids.slice(0, 100) } }, columns: 'id,type,occurred_at,due_at,status,direction,subject' }))
   }
   activities.sort((a, b) => String(b.occurred_at ?? b.due_at).localeCompare(String(a.occurred_at ?? a.due_at)))
   const history = await store.select('crm_property_history', { where: { organization_id: orgId, deal_id: dealId, property: 'dealstage' }, columns: 'value,effective_at,source', order: 'effective_at.desc', limit: 30 })

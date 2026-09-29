@@ -12,7 +12,7 @@ export const ASK_PROMPT_VERSION = 'ask-v1'
 const MAX_TOOL_CALLS = 6
 const MAX_TURNS = 5
 const MAX_QUESTION = 1000
-const ASK_TIME_BUDGET_MS = 35_000
+const ASK_TIME_BUDGET_MS = 40_000 // each model call is bounded by what is left of this (function maxDuration is 60 s)
 
 export const ANSWER_SCHEMA = { name: 'ask_answer', schema: {
   type: 'object', additionalProperties: false, required: ['answer', 'citation_ids', 'insufficient_data'],
@@ -47,7 +47,6 @@ export async function askIntegro({ store, ai, ctx, question, sessionId = null, r
 
   const session = await ensureSession(store, ctx, sessionId, q)
   const history = (await store.select('revenue_chat_messages', { where: { organization_id: ctx.orgId, session_id: session.id }, order: 'created_at.desc', limit: 6 })).reverse()
-  await store.insert('revenue_chat_messages', [{ organization_id: ctx.orgId, session_id: session.id, role: 'user', content: q }])
 
   const runner = createToolRunner({ store, ctx, requestId })
   const tools = toolsFor(ctx.role)
@@ -60,7 +59,8 @@ export async function askIntegro({ store, ai, ctx, question, sessionId = null, r
       for (let turn = 0; turn < MAX_TURNS; turn++) {
         // stay inside the function's time limit: the platform would otherwise kill us mid-call and strand the reservation
         if (Date.now() - started > ASK_TIME_BUDGET_MS) throw new AIUnavailable('timeout', 'The question took too long to answer; try a narrower one')
-        const resp = await ai.respond({ instructions: SYSTEM, input, tools, schema: ANSWER_SCHEMA })
+        const remaining = ASK_TIME_BUDGET_MS - (Date.now() - started)
+        const resp = await ai.respond({ instructions: SYSTEM, input, tools, schema: ANSWER_SCHEMA, timeoutMs: Math.max(3000, remaining) })
         addUsage(resp.usage)
         if (resp.refusal) throw new AIUnavailable('refused', 'The model declined to answer this request')
         if (resp.status === 'incomplete') throw new AIUnavailable('incomplete', 'The answer was cut off; try a narrower question')
@@ -97,6 +97,9 @@ export async function askIntegro({ store, ai, ctx, question, sessionId = null, r
     }
     if (cites.rejected.length) limitations.push('Some citations were removed because they did not match retrieved evidence.')
     const sources = cites.valid.map(id => runner.evidence.get(id))
+    // The user turn is stored together with the answer: a denied/failed ask leaves no dangling user message that
+    // would later be replayed to the model as history.
+    await store.insert('revenue_chat_messages', [{ organization_id: ctx.orgId, session_id: session.id, role: 'user', content: q }])
     const stored = await store.insert('revenue_chat_messages', [{ organization_id: ctx.orgId, session_id: session.id, role: 'assistant', content: answer, evidence_refs: sources, data_as_of: snapshot?.as_of ?? null }])
     return { session_id: session.id, message_id: stored[0].id, answer, verified, insufficient_data: result.insufficient_data === true || !snapshot, sources, limitations, data_as_of: snapshot?.as_of ?? null }
   } catch (e) {

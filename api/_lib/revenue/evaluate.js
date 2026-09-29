@@ -11,8 +11,6 @@ import { insertChunked, selectAll, IN_CHUNK } from '../store.js'
 
 export const filtersHash = filters => createHash('sha256').update(canonicalJson(filters ?? {})).digest('hex')
 
-const pageAll = selectAll
-
 export async function getActiveRuleset(store, orgId, { createIfMissing = true } = {}) {
   const rows = await store.select('revenue_rule_sets', { where: { organization_id: orgId }, order: 'version.desc', limit: 1 })
   if (rows[0]) return { version: rows[0].version, ruleset: mergeRuleset(rows[0].config), row: rows[0] }
@@ -42,11 +40,11 @@ export async function evaluateOrg({ store, orgId, asOf = new Date().toISOString(
   const stageById = new Map(stages.map(s => [s.id, s]))
   const ownerById = new Map(owners.map(o => [o.id, o]))
 
-  const allDeals = await pageAll(store, 'crm_deals', { where: { ...scope, archived: false }, columns: 'id,external_id,name,pipeline_id,stage_id,owner_id,owner_state,field_states,amount::text,currency,close_at,stage_entered_at,created_at_source', order: 'id.asc' })
+  const allDeals = await selectAll(store, 'crm_deals', { where: { ...scope, archived: false }, columns: 'id,external_id,name,pipeline_id,stage_id,owner_id,owner_state,field_states,amount::text,currency,close_at,stage_entered_at,created_at_source', order: 'id.asc' })
   const deals = allDeals.filter(d => !selected.size || (d.pipeline_id && selected.has(pipeById.get(d.pipeline_id)?.external_id)))
 
   // associations & activities (in-memory joins; sized for MVP-scale portals, see docs/revenue/operations.md)
-  const assoc = await pageAll(store, 'crm_associations', { where: { ...scope, deleted_at: { isnull: true } }, columns: 'from_type,from_external_id,to_type,to_external_id', order: 'id.asc' })
+  const assoc = await selectAll(store, 'crm_associations', { where: { ...scope, deleted_at: { isnull: true } }, columns: 'from_type,from_external_id,to_type,to_external_id', order: 'id.asc' })
   const contactsByDeal = new Map(), actIdsByDeal = new Map()
   for (const a of assoc) {
     if (a.from_type === 'deal' && a.to_type === 'contact') contactsByDeal.set(a.from_external_id, (contactsByDeal.get(a.from_external_id) ?? new Set()).add(a.to_external_id))
@@ -56,11 +54,11 @@ export async function evaluateOrg({ store, orgId, asOf = new Date().toISOString(
       actIdsByDeal.get(k).push(`${a.from_type}:${a.from_external_id}`)
     }
   }
-  const acts = await pageAll(store, 'crm_activities', { where: { ...scope, archived: false }, columns: 'id,external_id,type,occurred_at,due_at,status,is_system', order: 'id.asc' })
+  const acts = await selectAll(store, 'crm_activities', { where: { ...scope, archived: false }, columns: 'id,external_id,type,occurred_at,due_at,status,is_system', order: 'id.asc' })
   const actByKey = new Map(acts.map(a => [`${a.type}:${a.external_id}`, a]))
 
   // stage-duration statistics from real stage history only
-  const hist = await pageAll(store, 'crm_property_history', { where: { organization_id: orgId, connection_id: conn.id, property: 'dealstage' }, columns: 'deal_id,value,effective_at', order: 'effective_at.asc,id.asc' })
+  const hist = await selectAll(store, 'crm_property_history', { where: { organization_id: orgId, connection_id: conn.id, property: 'dealstage' }, columns: 'deal_id,value,effective_at', order: 'effective_at.asc,id.asc' })
   const dealPipe = new Map(allDeals.map(d => [d.id, d.pipeline_id]))
   const stats = computeStageStats(hist.map(h => ({ deal_id: h.deal_id, stage_external_id: `${dealPipe.get(h.deal_id)}|${h.value}`, effective_at: h.effective_at })), { asOf, windowDays: ruleset.thresholds.stalled_window_days })
 
@@ -103,7 +101,7 @@ export async function evaluateOrg({ store, orgId, asOf = new Date().toISOString(
   }
 
   // findings: reconcile against what we already have
-  const oldFindings = await pageAll(store, 'revenue_findings', { where: { organization_id: orgId }, columns: 'id,deal_id,rule_key,status,first_seen_at', order: 'id.asc' })
+  const oldFindings = await selectAll(store, 'revenue_findings', { where: { organization_id: orgId }, columns: 'id,deal_id,rule_key,status,first_seen_at', order: 'id.asc' })
   const byDeal = new Map()
   for (const f of oldFindings) (byDeal.get(f.deal_id) ?? byDeal.set(f.deal_id, []).get(f.deal_id)).push(f)
   const upserts = [], resolves = []
@@ -127,7 +125,7 @@ export async function evaluateOrg({ store, orgId, asOf = new Date().toISOString(
 
   // snapshot (unfiltered baseline; filtered views are computed live from the same items)
   const agg = aggregate(evals.map(e => ({ id: e.deal.id, amount: e.amount, currency: e.currency, is_open: e.isOpen, evaluation: e.evaluation })))
-  const openFindings = await pageAll(store, 'revenue_findings', { where: { organization_id: orgId, status: 'open' }, columns: 'category,severity,deal_id', order: 'id.asc' })
+  const openFindings = await selectAll(store, 'revenue_findings', { where: { organization_id: orgId, status: 'open' }, columns: 'category,severity,deal_id', order: 'id.asc' })
   const openDealIds = new Set(evals.filter(e => e.isOpen).map(e => e.deal.id))
   const relevant = openFindings.filter(f => openDealIds.has(f.deal_id))
   const metrics = {

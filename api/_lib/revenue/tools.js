@@ -5,7 +5,7 @@
 import { hubspotRecordUrl } from '../hubspot/links.js'
 import { createProposal } from './actions.js'
 import { can } from '../auth.js'
-import { filtersHash } from './evaluate.js'
+import { getLatestSnapshot } from './queries.js'
 import { isSuppressed } from '../rules/findings.js'
 
 const MAX_LIMIT = 20
@@ -41,12 +41,11 @@ export function createToolRunner({ store, ctx, requestId }) {
     return c?.portal_id ?? null
   }
   const dealRef = (d, portalId, asOf) => ({ id: `deal:${d.id}`, type: 'deal', label: d.name ?? d.external_id, deal_id: d.id, hubspot_url: hubspotRecordUrl(portalId, 'deal', d.external_id), as_of: asOf })
-  const latestSnapshot = async () => (await store.select('revenue_score_snapshots', { where: { organization_id: orgId, filters_hash: filtersHash({}) }, order: 'created_at.desc', limit: 1 }))[0] ?? null
   const done = out => { facts.push(out); return out }
 
   const impl = {
     async get_pipeline_metrics() {
-      const s = await latestSnapshot()
+      const s = await getLatestSnapshot(store, orgId)
       if (!s) return done({ error: 'no_data', message: 'No analyzed snapshot exists yet.' })
       const id = ref({ id: `snapshot:${s.id}`, type: 'snapshot', label: 'Pipeline snapshot', as_of: s.as_of })
       return done({ evidence_id: id, as_of: s.as_of, revenue_score: s.score, eligible_deals: s.eligible_count, open_deals: s.total_open_count, average_coverage: s.avg_coverage, status: s.status, metrics: s.metrics })
@@ -84,14 +83,15 @@ export function createToolRunner({ store, ctx, requestId }) {
     },
     async get_deal_timeline({ deal_id, limit = 15 }) {
       if (!UUID.test(String(deal_id))) return done({ error: 'not_found' })
-      const [d] = await store.select('crm_deals', { where: { id: deal_id, organization_id: orgId }, columns: 'id,external_id,name' })
+      const [d] = await store.select('crm_deals', { where: { id: deal_id, organization_id: orgId }, columns: 'id,external_id,name,connection_id' })
       if (!d) return done({ error: 'not_found' })
       const lim = Math.min(Math.max(Number(limit) || 15, 1), 30)
-      const links = await store.select('crm_associations', { where: { organization_id: orgId, to_type: 'deal', to_external_id: d.external_id, deleted_at: { isnull: true } }, columns: 'from_type,from_external_id', limit: 200 })
+      // HubSpot ids are only unique per portal: always scope by the deal's own connection
+      const links = await store.select('crm_associations', { where: { organization_id: orgId, connection_id: d.connection_id, to_type: 'deal', to_external_id: d.external_id, deleted_at: { isnull: true } }, columns: 'from_type,from_external_id', limit: 200 })
       const acts = []
       for (const t of ['call', 'email', 'meeting', 'task']) {
         const ids = links.filter(l => l.from_type === t).map(l => l.from_external_id)
-        if (ids.length) acts.push(...await store.select('crm_activities', { where: { organization_id: orgId, type: t, external_id: { in: ids.slice(0, 100) } }, columns: 'id,type,occurred_at,due_at,status,direction,subject' }))
+        if (ids.length) acts.push(...await store.select('crm_activities', { where: { organization_id: orgId, connection_id: d.connection_id, type: t, external_id: { in: ids.slice(0, 100) } }, columns: 'id,type,occurred_at,due_at,status,direction,subject' }))
       }
       acts.sort((a, b) => String(b.occurred_at ?? b.due_at).localeCompare(String(a.occurred_at ?? a.due_at)))
       const hist = await store.select('crm_property_history', { where: { organization_id: orgId, deal_id, property: 'dealstage' }, columns: 'value,effective_at', order: 'effective_at.desc', limit: 10 })

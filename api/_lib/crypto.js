@@ -47,4 +47,3 @@ export function decrypt(value, encCfg) {
   return Buffer.concat([d.update(fromB64u(ct)), d.final()]).toString('utf8')
 }
 
-export const keyVersionOf = value => String(value).split('.')[1] ?? null

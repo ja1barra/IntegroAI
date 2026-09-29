@@ -186,3 +186,15 @@ test('review round 3: one deal that the database rejects is skipped and reported
   assert.equal((await store.select('crm_deals', { where: { organization_id: orgId, external_id: 'fine1' } })).length, 1)
   assert.equal((await store.select('crm_deals', { where: { organization_id: orgId, external_id: 'poison' } })).length, 0)
 })
+
+test('review round 4: primary companies are linked in batches for large pages (no giant URL, no per-deal PATCH)', async () => {
+  for (let i = 0; i < 130; i++) {
+    fake.state.assoc.companies.set('bulk' + i, ['co' + i]); fake.state.companies.set('co' + i, { id: 'co' + i, properties: { name: 'Company ' + i } })
+  }
+  const before = fake.state.calls.length
+  const runId = await newRun('full')
+  await sync(runId, { now: () => NOW + 30_000_000 })
+  const linked = await db.query(`select count(*)::int c from public.crm_deals where organization_id = $1 and company_id is not null and external_id like 'bulk%'`, [orgId])
+  assert.ok(linked.rows[0].c >= 120)
+  assert.equal(fake.state.calls.slice(before).filter(c => c[0] === 'PATCH').length, 0)
+})

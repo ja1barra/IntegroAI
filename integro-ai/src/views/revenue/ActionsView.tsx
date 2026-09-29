@@ -98,14 +98,19 @@ function PayloadView({ p }: { p: Proposal }) {
 }
 
 function EditModal({ p, onClose, onSaved }: { p: Proposal; onClose: () => void; onSaved: () => void }) {
-  const pl = p.payload as { subject?: string; body?: string; due_at?: string }
+  const pl = p.payload as { subject?: string; body?: string; due_at?: string; owner_external_id?: string | null }
   const [subject, setSubject] = useState(pl.subject ?? '')
   const [body, setBody] = useState(pl.body ?? '')
-  const [due, setDue] = useState((pl.due_at ?? new Date().toISOString()).slice(0, 10))
+  const originalDue = (pl.due_at ?? new Date().toISOString()).slice(0, 10)
+  const [due, setDue] = useState(originalDue)
   const [err, setErr] = useState<string | null>(null)
   const save = async () => {
     try {
-      await api(`revenue/actions/${p.id}/edit`, { method: 'POST', body: { version: p.version, payload: p.kind === 'create_task' ? { subject, body, due_at: new Date(`${due}T12:00:00`).toISOString() } : { subject, body } } })
+      // Keep everything the user did not touch: the assignee, and the exact due timestamp unless the date was changed.
+      const payload = p.kind === 'create_task'
+        ? { subject, body, due_at: due === originalDue && pl.due_at ? pl.due_at : new Date(`${due}T12:00:00`).toISOString(), ...(pl.owner_external_id ? { owner_external_id: pl.owner_external_id } : {}) }
+        : { subject, body }
+      await api(`revenue/actions/${p.id}/edit`, { method: 'POST', body: { version: p.version, payload } })
       onSaved()
     } catch (e) { setErr(e instanceof ApiError ? e.message : 'Failed') }
   }

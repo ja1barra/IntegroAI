@@ -31,7 +31,7 @@ export async function requestSync({ store, enqueue, orgId, userId = null, full =
 }
 
 /** Scheduler-driven freshness: rules depend on "today", so diagnoses go stale without periodic syncs. */
-export async function enqueueScheduledSyncs({ store, enqueue, olderThanHours, now = Date.now(), log = () => {} }) {
+export async function enqueueScheduledSyncs({ store, enqueue, olderThanHours, fullEveryDays = 7, now = Date.now(), log = () => {} }) {
   if (!olderThanHours || olderThanHours <= 0) return 0
   const conns = await selectAll(store, 'crm_connections', { where: { status: 'active' }, columns: 'organization_id,last_success_at,connected_at', order: 'organization_id.asc' })
   let n = 0
@@ -44,7 +44,11 @@ export async function enqueueScheduledSyncs({ store, enqueue, olderThanHours, no
     const [flags] = await store.select('revenue_org_flags', { where: { organization_id: c.organization_id } })
     const [settings] = await store.select('revenue_settings', { where: { organization_id: c.organization_id } })
     if (!flags?.revenue_mvp_enabled || !['confirmed', 'synced'].includes(settings?.onboarding_state ?? '')) continue // never sync before an admin confirmed the setup
-    try { await requestSync({ store, enqueue, orgId: c.organization_id, full: false }); n++ } catch (e) { log('warn', 'scheduled_sync.skipped', { org_id: c.organization_id, code: e?.code }) }
+    // A full run is the only one that learns about deals archived/deleted in HubSpot (incremental Search never returns them),
+    // so one is scheduled periodically.
+    const [lastFull] = await store.select('revenue_sync_runs', { where: { organization_id: c.organization_id, kind: 'full', status: { in: ['succeeded', 'partial'] } }, order: 'finished_at.desc', limit: 1, columns: 'finished_at' })
+    const needFull = !lastFull || now - Date.parse(lastFull.finished_at ?? 0) > fullEveryDays * 86400_000
+    try { await requestSync({ store, enqueue, orgId: c.organization_id, full: needFull }); n++ } catch (e) { log('warn', 'scheduled_sync.skipped', { org_id: c.organization_id, code: e?.code }) }
   }
   return n
 }

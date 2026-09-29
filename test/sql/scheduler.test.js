@@ -32,3 +32,14 @@ test('scheduler enqueues an incremental sync only for stale, enabled, admin-conf
   assert.equal(await enqueueScheduledSyncs({ store, enqueue, olderThanHours: 0 }), 0)                              // disabled
   assert.equal((await db.query(`select count(*)::int c from private.revenue_jobs where kind='sync' and organization_id=$1 and status='queued'`, [A.orgId])).rows[0].c, 1)
 })
+
+test('scheduler requests a FULL run when the last full run is old (only full runs learn about archived deals)', async () => {
+  await db.query(`update public.revenue_sync_runs set status = 'succeeded', finished_at = now() - interval '10 days', kind = 'full' where organization_id = $1`, [A.orgId])
+  await db.query(`update private.revenue_jobs set status = 'dead' where organization_id = $1`, [A.orgId])
+  await enqueueScheduledSyncs({ store, enqueue, olderThanHours: 6 })
+  assert.equal((await store.select('revenue_sync_runs', { where: { organization_id: A.orgId, status: 'queued' } }))[0].kind, 'full')
+  await db.query(`update public.revenue_sync_runs set status = 'succeeded', finished_at = now() - interval '1 hour', kind = 'full' where organization_id = $1`, [A.orgId])
+  await db.query(`update private.revenue_jobs set status = 'dead' where organization_id = $1`, [A.orgId])
+  await enqueueScheduledSyncs({ store, enqueue, olderThanHours: 6 })
+  assert.equal((await store.select('revenue_sync_runs', { where: { organization_id: A.orgId, status: 'queued' } }))[0].kind, 'incremental')
+})

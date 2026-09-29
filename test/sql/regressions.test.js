@@ -270,3 +270,65 @@ test('review round 3: poison records (bad currency / absurd amount) are sanitize
   const ok = normalizeDeal({ id: '10', properties: { amount: '10.5', deal_currency_code: 'eur' } }, maps)
   assert.equal(ok.currency, 'EUR'); assert.equal(ok.amount, '10.5')
 })
+
+test('review round 4: a partial onboarding save never downgrades a confirmed/synced org (scheduled syncs keep running)', async () => {
+  const { saveOnboarding } = await import('../../api/_lib/revenue/onboarding.js')
+  const ctx = { orgId: A.orgId, userId: A.user, role: 'admin' }
+  await store.update('revenue_settings', { organization_id: A.orgId }, { onboarding_state: 'synced', selected_pipeline_ids: ['p1'], currency: 'USD', timezone: 'UTC' })
+  for (const [s, wantAfter] of [['synced', 'synced'], ['confirmed', 'confirmed']]) {
+    await store.update('revenue_settings', { organization_id: A.orgId }, { onboarding_state: s })
+    assert.equal((await saveOnboarding({ store, ctx, body: { timezone: 'Europe/Paris' } })).state, wantAfter)
+    assert.equal((await saveOnboarding({ store, ctx, body: { stage_categories: { s_late: 'late' } } })).state, wantAfter)
+  }
+  assert.equal((await saveOnboarding({ store, ctx, body: { confirm: false } })).state, 'stages_mapped')               // explicit un-confirm still works
+})
+
+test('review round 4: every outcome-uncertain path schedules a reconcile job (task created but verification failed)', async () => {
+  await db.query(`update public.crm_connections set status = 'active' where status <> 'disconnected'`)
+  await store.update('revenue_org_flags', { organization_id: A.orgId }, { hubspot_write_actions_enabled: true })
+  const p = await createProposal({ store, ctx: { orgId: A.orgId, userId: A.user, role: 'member' }, dealId: A.dealId('d2'), kind: 'create_task', payload: { subject: 'v', body: '', due_at: new Date(Date.now() + 3600_000).toISOString() } })
+  const ap = await approveProposal({ store, ctx: { orgId: A.orgId, userId: A.user, role: 'admin' }, proposalId: p.id, version: 1, hash: p.payload_hash })
+  const client = { get: async (path) => { if (path.includes('/tasks/')) throw new Error('404 not yet indexed'); return { id: '1', properties: {} } }, post: async () => ({ id: 'task-77' }), request: async () => ({}) }
+  assert.equal((await executeAction({ store, orgId: A.orgId, executionId: ap.execution_id, getClient: async () => client })).outcome, 'needs_review')
+  assert.equal((await db.query(`select count(*)::int c from private.revenue_jobs where kind='reconcile' and dedupe_key = $1`, ['reconcile:' + ap.execution_id])).rows[0].c, 1)
+  // ...and reconcile resolves it by the embedded marker
+  const { reconcileExecution } = await import('../../api/_lib/revenue/actions.js')
+  const found = { post: async () => ({ results: [{ id: 'task-77' }] }), get: async () => ({}), request: async () => ({}) }
+  assert.equal((await reconcileExecution({ store, orgId: A.orgId, executionId: ap.execution_id, getClient: async () => found })).outcome, 'succeeded')
+})
+
+test('review round 4: editing a proposal keeps an unchanged (now past) due date and the assignee', async () => {
+  const { editProposal } = await import('../../api/_lib/revenue/actions.js')
+  const due = new Date(Date.now() + 3600_000).toISOString()
+  const p = await createProposal({ store, ctx: { orgId: A.orgId, userId: A.user, role: 'member' }, dealId: A.dealId('d2'), kind: 'create_task', payload: { subject: 'a', body: '', due_at: due, owner_external_id: '12345' } })
+  await db.query(`update public.revenue_action_proposals set payload = jsonb_set(payload, '{due_at}', to_jsonb($2::text)) where id = $1`, [p.id, new Date(Date.now() - 3600_000).toISOString()])   // the date has since passed
+  const cur = (await store.select('revenue_action_proposals', { where: { id: p.id } }))[0]
+  await editProposal({ store, ctx: { orgId: A.orgId, userId: A.user, role: 'member' }, proposalId: p.id, baseVersion: 1, payload: { ...cur.payload, subject: 'only the subject changed' } })
+  const after = (await store.select('revenue_action_proposals', { where: { id: p.id } }))[0]
+  assert.equal(after.payload.subject, 'only the subject changed'); assert.equal(after.payload.owner_external_id, '12345'); assert.equal(after.version, 2)
+  await assert.rejects(editProposal({ store, ctx: { orgId: A.orgId, userId: A.user, role: 'member' }, proposalId: p.id, baseVersion: 2, payload: { ...after.payload, due_at: new Date(Date.now() - 86400_000).toISOString() } }), e => e.status === 400)   // a NEW past date is still refused
+})
+
+test('review round 4: deal detail and Ask timeline never mix in another connection\'s objects that share HubSpot ids', async () => {
+  const { dealDetail } = await import('../../api/_lib/revenue/queries.js')
+  const [old] = await store.insert('crm_connections', [{ organization_id: A.orgId, provider: 'hubspot', portal_id: 'old-portal', status: 'disconnected' }])
+  await store.insert('crm_contacts', [{ organization_id: A.orgId, connection_id: old.id, external_id: 'c1', first_name: 'GHOST', last_name: 'FromOldPortal' }])
+  await store.insert('crm_associations', [{ organization_id: A.orgId, connection_id: old.id, from_type: 'deal', from_external_id: 'd1', to_type: 'contact', to_external_id: 'c1', association_type: '3' }])
+  await store.insert('crm_activities', [{ organization_id: A.orgId, connection_id: old.id, external_id: 'e1', type: 'email', subject: 'GHOST EMAIL', occurred_at: asOf }])
+  await store.insert('crm_associations', [{ organization_id: A.orgId, connection_id: old.id, from_type: 'email', from_external_id: 'e1', to_type: 'deal', to_external_id: 'd1', association_type: '1' }])
+  const d = await dealDetail({ store, orgId: A.orgId, dealId: A.dealId('d1') })
+  assert.ok(!JSON.stringify(d).includes('GHOST'))
+  const { createToolRunner } = await import('../../api/_lib/revenue/tools.js')
+  const out = await createToolRunner({ store, ctx: { orgId: A.orgId, userId: A.user, role: 'admin' }, requestId: 'x' }).run('get_deal_timeline', JSON.stringify({ deal_id: A.dealId('d1'), limit: 30 }))
+  assert.ok(!JSON.stringify(out).includes('GHOST'))
+})
+
+test('review round 4: the message store is not polluted by failed asks; kick is not available to viewers', async () => {
+  const { askIntegro } = await import('../../api/_lib/revenue/ask.js')
+  await store.update('revenue_org_flags', { organization_id: A.orgId }, { revenue_mvp_enabled: true, managed_ai_enabled: true })
+  const boom = { available: true, model: 'm', respond: async () => { const { AIUnavailable } = await import('../../api/_lib/ai/openai.js'); throw new AIUnavailable('timeout', 't') } }
+  const err = await askIntegro({ store, ai: boom, ctx: { orgId: A.orgId, userId: A.user, role: 'admin' }, question: 'will fail', requestId: 'x' }).catch(e => e)
+  assert.equal(err.status, 503)
+  const sid = err.extra.session_id
+  assert.equal((await store.select('revenue_chat_messages', { where: { session_id: sid } })).length, 0)          // no dangling user turn
+})

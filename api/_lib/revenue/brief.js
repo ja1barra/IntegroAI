@@ -8,7 +8,7 @@ import { filtersHash } from './evaluate.js'
 import { hubspotRecordUrl } from '../hubspot/links.js'
 import { getFlags } from '../auth.js'
 import { HttpError } from '../http.js'
-import { cmpAmountDesc } from './queries.js'
+import { cmpAmountDesc, getLatestSnapshot } from './queries.js'
 import { selectAll, IN_CHUNK } from '../store.js'
 import { isSuppressed } from '../rules/findings.js'
 
@@ -31,10 +31,6 @@ const SYSTEM = `You write the narrative of a weekly/daily B2B SaaS pipeline brie
 
 export function idempotencyKey({ orgId, period, periodEnd, snapshotId, rulesVersion, model }) {
   return createHash('sha256').update([orgId, period, periodEnd, snapshotId, rulesVersion, BRIEF_PROMPT_VERSION, model ?? 'deterministic'].join('|')).digest('hex')
-}
-
-export async function latestSnapshot(store, orgId) {
-  return (await store.select('revenue_score_snapshots', { where: { organization_id: orgId, filters_hash: filtersHash({}) }, order: 'created_at.desc', limit: 1 }))[0] ?? null
 }
 
 export async function buildBriefContent({ store, orgId, snapshot, previous, period }) {
@@ -85,7 +81,7 @@ export async function generateBrief({ store, ai, orgId, userId = null, period, r
   if (!PERIOD_DAYS[period]) throw new HttpError(400, 'bad_request', 'period must be daily or weekly')
   const flags = await getFlags(store, orgId)
   if (!flags.revenue_mvp_enabled) throw new HttpError(403, 'feature_disabled', 'Revenue Manager is not enabled')
-  const snapshot = await latestSnapshot(store, orgId)
+  const snapshot = await getLatestSnapshot(store, orgId)
   if (!snapshot) throw new HttpError(409, 'no_data', 'There is no analyzed snapshot yet; run a sync first')
 
   const days = PERIOD_DAYS[period]

@@ -6,7 +6,7 @@
 // ever deleted because it was absent from a page; archival is learned only from
 // HubSpot's explicit archived listing.
 
-import { insertChunked, selectAll } from '../store.js'
+import { insertChunked, selectAll, IN_CHUNK } from '../store.js'
 import { HubSpotForbidden } from './client.js'
 import { HttpError } from '../http.js'
 import {
@@ -36,6 +36,7 @@ export async function runSync({ store, client, orgId, connectionId, runId, deadl
   const checkTime = () => { if (now() > deadline) throw new TimeBudgetExceeded() }
   const bump = (k, n = 1) => { counters[k] = (counters[k] ?? 0) + n }
   let finalStatus = 'succeeded'
+  let closedStageIds = null // loaded once per run (not once per page) by openDealIds()
   const warn = w => { if (!warnings.includes(w)) warnings.push(w) }
   const save = (extra = {}) => store.update('revenue_sync_runs', { id: runId, organization_id: orgId }, {
     status: 'running', started_at: startedAt, counters: { ...counters, state }, coverage, warnings, ...extra,
@@ -165,10 +166,9 @@ export async function runSync({ store, client, orgId, connectionId, runId, deadl
   }
 
   async function openDealIds(offset, limit) {
-    const stages = await store.select('crm_stages', { where: scope, columns: 'id,is_closed' })
-    const closed = new Set(stages.filter(s => s.is_closed === true).map(s => s.id))
+    if (!closedStageIds) closedStageIds = new Set((await selectAll(store, 'crm_stages', { where: scope, columns: 'id,is_closed', order: 'id.asc' })).filter(s => s.is_closed === true).map(s => s.id))
     const rows = await openDealPage(offset, limit)
-    return { rows: rows.filter(r => !closed.has(r.stage_id)), raw: rows.length }
+    return { rows: rows.filter(r => !closedStageIds.has(r.stage_id)), raw: rows.length }
   }
 
   async function associations() {
@@ -237,11 +237,14 @@ export async function runSync({ store, client, orgId, connectionId, runId, deadl
   async function setPrimaryCompanies(fresh) {
     const byDeal = new Map()
     for (const x of fresh) if (!byDeal.has(x.from) || x.primary) byDeal.set(x.from, x.to)
-    const companies = new Map((await store.select('crm_companies', { where: { ...scope, external_id: { in: [...new Set(byDeal.values())].slice(0, 500) } }, columns: 'id,external_id' })).map(c => [c.external_id, c.id]))
-    for (const [dealExt, coExt] of byDeal) {
-      const id = companies.get(coExt)
-      if (id) await store.update('crm_deals', { ...scope, external_id: dealExt }, { company_id: id })
+    const wanted = [...new Set(byDeal.values())]
+    const companies = new Map()
+    for (let i = 0; i < wanted.length; i += IN_CHUNK) {
+      for (const c of await store.select('crm_companies', { where: { ...scope, external_id: { in: wanted.slice(i, i + IN_CHUNK) } }, columns: 'id,external_id' })) companies.set(c.external_id, c.id)
     }
+    // one partial upsert instead of a PATCH per deal (only company_id is written; the deals already exist)
+    const rows = [...byDeal].filter(([, co]) => companies.has(co)).map(([dealExt, co]) => ({ external_id: dealExt, company_id: companies.get(co) }))
+    await upsert('crm_deals', rows)
   }
 
   async function activities() {
