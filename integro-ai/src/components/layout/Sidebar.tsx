@@ -36,6 +36,7 @@ const NAV_GROUPS: { label?: string; quiet?: boolean; items: NavItem[] }[] = [
     { id: 'playbook-agent', icon: 'openBook',         label: 'Growth Playbooks', agent: true, color: '#9b59b6' },
   ]},
   { quiet: true, items: [
+    { id: 'demo-entry',   icon: 'sparkles',     label: 'Revenue Manager (demo)' },
     { id: 'integrations', icon: 'integrations', label: 'Integrations' },
     { id: 'team',         icon: 'team',         label: 'Team' },
     { id: 'settings',     icon: 'settings',     label: 'Settings' },
@@ -63,6 +64,8 @@ const REVENUE_NAV_GROUPS: { label?: string; quiet?: boolean; items: NavItem[] }[
 export default function Sidebar({ view, setView, agentStates, user, onLogout, poweredByVisible, revenueNav }: Props) {
   const [menuOpen, setMenuOpen] = useState(false)
   const groups = revenueNav ? REVENUE_NAV_GROUPS : NAV_GROUPS
+  // explicit opt-in to the fictitious-data preview of Revenue Manager (see lib/revenue/demo.ts)
+  const go = (id: string) => { if (id === 'demo-entry') window.location.assign('/?demo=1'); else setView(id) }
 
   return (
     <>
@@ -87,8 +90,8 @@ export default function Sidebar({ view, setView, agentStates, user, onLogout, po
               role="button"
               tabIndex={0}
               aria-current={view === item.id ? 'page' : undefined}
-              onClick={() => setView(item.id)}
-              onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setView(item.id) } }}
+              onClick={() => go(item.id)}
+              onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(item.id) } }}
             >
               <span className="nav-icon"><Icon name={item.icon} size={15} /></span>
               {item.label}
