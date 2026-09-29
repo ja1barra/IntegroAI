@@ -4,6 +4,7 @@ import { useApi } from '../../lib/revenue/useApi'
 import { useRevenue, canRole } from '../../lib/revenue/RevenueContext'
 import { t } from '../../lib/revenue/i18n'
 import { formatDate } from '../../lib/revenue/format'
+import { isDemo } from '../../lib/revenue/demo'
 import type { Proposal } from '../../lib/revenue/types'
 import { StateBox, Loading, ErrorBox, Modal, Chip } from '../../components/revenue/common'
 import type { RevenueViewProps } from './OverviewView'
@@ -26,7 +27,7 @@ export default function ActionsView({ active, addToast, onOpenDeal }: RevenueVie
     setBusy(true)
     try {
       await api(`revenue/actions/${p.id}/approve`, { method: 'POST', body: { version: p.version, payload_hash: p.payload_hash } })
-      await kick(); reload(); addToast('Approved — executing in HubSpot')
+      await kick(); reload(); addToast(isDemo() ? 'Approved (demo: nothing was sent to HubSpot)' : 'Approved — executing in HubSpot')
     } catch (e) { addToast(e instanceof ApiError ? e.message : 'Failed', 'error'); reload() } finally { setBusy(false) }
   }
 

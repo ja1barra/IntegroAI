@@ -1506,3 +1506,6 @@ body {
   .rv-mobile-nav button.is-active { color:var(--orange); }
   .main { padding-bottom:64px; }
 }
+.rv-demo-banner { position:sticky; top:0; z-index:30; display:flex; gap:10px; align-items:center; flex-wrap:wrap; padding:8px 32px; background:#fff3cd; color:#5c4400; border-bottom:1px solid #f5a623; font-size:12.5px; }
+.rv-demo-banner strong { font-family:'DM Mono',monospace; letter-spacing:0.08em; }
+body.dark .rv-demo-banner { background:#3a2e00; color:#ffe08a; }

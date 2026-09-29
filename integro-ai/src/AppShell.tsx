@@ -20,6 +20,7 @@ import TeamView from './views/TeamView'
 import SettingsView from './views/SettingsView'
 import AcademyView from './views/AcademyView'
 import { RevenueProvider, useRevenue } from './lib/revenue/RevenueContext'
+import { isDemo, exitDemo } from './lib/revenue/demo'
 import OverviewView from './views/revenue/OverviewView'
 import PipelineDoctorView from './views/revenue/PipelineDoctorView'
 import DealsView from './views/revenue/DealsView'
@@ -364,6 +365,12 @@ function AppShellInner({ user, userId, onLogout }: { user: User; userId: string;
         />
 
         <main className="main" onClick={() => setNotifOpen(false)}>
+          {isDemo() && (
+            <div className="rv-demo-banner" role="status">
+              <strong>DEMO</strong> — fictitious data for previewing Revenue Manager. Nothing is saved, and nothing is read from or sent to HubSpot.
+              <button className="btn-sm btn-sm-ghost" onClick={exitDemo}>Exit demo</button>
+            </div>
+          )}
           {revLoading ? (
             <div className="view active"><div className="rv-loading" role="status">Loading…</div></div>
           ) : revenueMode ? (

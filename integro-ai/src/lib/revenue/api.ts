@@ -1,4 +1,5 @@
 import { supabase } from '../supabase'
+import { isDemo, demoApi } from './demo'
 
 export class ApiError extends Error {
   status: number
@@ -19,6 +20,8 @@ type Query = Record<string, string | number | undefined | null>
 // Calls the Revenue API with the signed-in user's session. A 503 or a network
 // failure is reported as such (ApiError) and never treated as a logout.
 export async function api<T>(path: string, opts: { method?: 'GET' | 'POST'; body?: unknown; query?: Query } = {}): Promise<T> {
+  // Explicit opt-in only (?demo=1): fictitious in-memory data, no server call. Never a silent fallback.
+  if (isDemo()) return demoApi<T>(path, opts)
   const { data: { session } } = await supabase.auth.getSession()
   const qs = new URLSearchParams()
   for (const [k, v] of Object.entries(opts.query ?? {})) if (v !== undefined && v !== null && v !== '') qs.set(k, String(v))
